@@ -1,0 +1,10 @@
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+mediapipe
+pytorch-lightning
+tensorflow-addons
+tensorflow
+opencv-python
