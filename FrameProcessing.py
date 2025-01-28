@@ -1,1 +1,0 @@
-all_data = json.load("Dataset\WLASL.json")
