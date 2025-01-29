@@ -12,6 +12,7 @@ video_dir = "Dataset/videos"
 
 processed_data = []
 
+MAX_FRAME_COUNT = 0  
 
 for i in tqdm(range(len(all_data)), ncols=100):
     gloss = all_data[i]["gloss"]
@@ -33,5 +34,6 @@ for i in tqdm(range(len(all_data)), ncols=100):
                 "frame_start": frame_start,
                 "frame_end": frame_end
             })
+            MAX_FRAME_COUNT = max(MAX_FRAME_COUNT, frame_end - frame_start + 1)
 
 print(len(processed_data))

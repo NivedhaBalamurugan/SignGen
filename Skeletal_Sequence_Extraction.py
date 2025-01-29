@@ -7,8 +7,6 @@ import DataProcessing
 
 
 NUM_LANDMARKS = 21 + 21 + 6 + 1  
-MAX_FRAME_COUNT = 0  
-
 
 mp_hands = mp.solutions.hands
 mp_pose = mp.solutions.pose
@@ -110,7 +108,6 @@ for data in tqdm(DataProcessing.processed_data, ncols=100):
         palm_landmarks, body_landmarks = get_video_landmarks(video_path, start_frame, end_frame)
         palm_skeleton_data[gloss].append(palm_landmarks)
         body_skeleton_data[gloss].append(body_landmarks)
-        MAX_FRAME_COUNT = max(MAX_FRAME_COUNT, end_frame - start_frame + 1)
     except Exception as e:
         print(f"\nError processing video {video_path}\n{e}")
 
