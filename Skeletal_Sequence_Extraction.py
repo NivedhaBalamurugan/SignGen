@@ -3,7 +3,7 @@ import numpy as np
 import mediapipe as mp
 import json
 from tqdm import tqdm
-import DataProcessing
+import data_processing
 
 
 NUM_LANDMARKS = 21 + 21 + 6 + 1  
@@ -94,7 +94,7 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
 palm_skeleton_data = {}
 body_skeleton_data = {}
 
-for data in tqdm(DataProcessing.processed_data, ncols=100):
+for data in tqdm(data_processing.processed_data, ncols=100):
     video_path = data["video_path"]
     start_frame = data["frame_start"]
     end_frame = data["frame_end"]
