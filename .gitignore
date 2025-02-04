@@ -1,1 +1,5 @@
 Dataset/
+
+body_landmarks.json
+palm_landmarks.json
+checkpoint.json
