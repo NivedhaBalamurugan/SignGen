@@ -2,10 +2,8 @@ __pycache__/
 Dataset/
 output_frames/
 
-body_landmarks.json
-body_landmarks.jsonl.gz
-palm_landmarks.json
-palm_landmarks.jsonl.gz
-checkpoint.json
-
-notepad.md
+[0-9]_body_landmarks.json
+[0-9]_body_landmarks.jsonl.gz
+[0-9]_palm_landmarks.json
+[0-9]_palm_landmarks.jsonl.gz
+[0-9]_checkpoint.json
