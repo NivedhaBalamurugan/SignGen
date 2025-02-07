@@ -8,11 +8,13 @@ from tqdm import tqdm
 import data_processing
 from collections import defaultdict
 
+CHUNK_INDEX = 0
+
 FP_PRECSION = np.float32
 
-PALM_JSONL_PATH = "palm_landmarks.jsonl.gz"
-BODY_JSONL_PATH = "body_landmarks.jsonl.gz"
-CHECKPOINT_PATH = "checkpoint.json"
+PALM_JSONL_PATH = f"{CHUNK_INDEX}_palm_landmarks.jsonl.gz"
+BODY_JSONL_PATH = f"{CHUNK_INDEX}_body_landmarks.jsonl.gz"
+CHECKPOINT_PATH = f"{CHUNK_INDEX}_checkpoint.json"
 
 MAX_FRAME_COUNT = 0
 SAVE_EVERY_N_VIDEOS = 10
