@@ -18,6 +18,7 @@ mp_pose = mp.solutions.pose
 hands = mp_hands.Hands(static_image_mode=False, max_num_hands=2, min_detection_confidence=0.5)
 pose = mp_pose.Pose(static_image_mode=False, model_complexity=1, min_detection_confidence=0.5, min_tracking_confidence=0.5)
 
+
 def process_frame(frame):
     frame = cv2.resize(frame, (224, 224))
     return frame
@@ -60,6 +61,8 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
     if end_frame < 0 or end_frame > total_frames:
         end_frame = total_frames
 
+    frame_count = end_frame - start_frame + 1
+
     all_palm_landmarks = []
     all_body_landmarks = []
 
@@ -80,7 +83,7 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
             all_body_landmarks.append(body_landmarks.tolist())
 
     cap.release()
-    return all_palm_landmarks, all_body_landmarks
+    return all_palm_landmarks, all_body_landmarks, frame_count
 
 def load_existing_data():
     if os.path.exists(PALM_JSON_PATH) and os.path.exists(BODY_JSON_PATH):
@@ -112,7 +115,10 @@ def save_progress(palm_skeleton_data, body_skeleton_data, processed_videos):
     with open(CHECKPOINT_PATH, "w") as checkpoint_file:
         json.dump(list(processed_videos), checkpoint_file, indent=4)
 
+
 palm_skeleton_data, body_skeleton_data, processed_videos = load_existing_data()
+
+MAX_FRAME_COUNT = 0
 
 for data in tqdm(data_processing.processed_data, ncols=100):
     video_path = data["video_path"]
@@ -128,9 +134,11 @@ for data in tqdm(data_processing.processed_data, ncols=100):
         body_skeleton_data[gloss] = []
 
     try:
-        palm_landmarks, body_landmarks = get_video_landmarks(video_path, start_frame, end_frame)
+        palm_landmarks, body_landmarks, frame_count = get_video_landmarks(video_path, start_frame, end_frame)
         palm_skeleton_data[gloss].append(palm_landmarks)
         body_skeleton_data[gloss].append(body_landmarks)
+
+        MAX_FRAME_COUNT = max(MAX_FRAME_COUNT, frame_count)
 
         processed_videos.add(video_path)
         save_progress(palm_skeleton_data, body_skeleton_data, processed_videos)
