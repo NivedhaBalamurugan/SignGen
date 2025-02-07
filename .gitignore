@@ -1,5 +1,10 @@
 Dataset/
+output_frames/
 
 body_landmarks.json
+body_landmarks.jsonl.gz
 palm_landmarks.json
+palm_landmarks.jsonl.gz
 checkpoint.json
+
+notepad.md

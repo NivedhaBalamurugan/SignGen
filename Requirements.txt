@@ -1,9 +1,9 @@
-numpy
-pandas
 matplotlib
+mediapipe
+numpy
+opencv-python
+orjson
+pandas
 seaborn
 scikit-learn
-mediapipe
-pytorch-lightning
 tensorflow
-opencv-python
