@@ -6,6 +6,7 @@ import gzip
 import os
 from tqdm import tqdm
 import data_processing
+from collections import defaultdict
 
 FP_PRECSION = np.float32
 
@@ -14,7 +15,7 @@ BODY_JSONL_PATH = "body_landmarks.jsonl.gz"
 CHECKPOINT_PATH = "checkpoint.json"
 
 MAX_FRAME_COUNT = 0
-
+SAVE_EVERY_N_VIDEOS = 10
 NUM_LANDMARKS = 21 + 21 + 6 + 1
 
 mp_hands = mp.solutions.hands
@@ -60,6 +61,7 @@ def get_frame_landmarks(frame):
 
     return palm_landmarks, body_landmarks
 
+
 def get_video_landmarks(videoPath, start_frame, end_frame):
     cap = cv2.VideoCapture(videoPath)
     if start_frame < 1:
@@ -93,42 +95,49 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
     return all_palm_landmarks, all_body_landmarks, frame_count
 
 
-def write_jsonl_gz(file_path, data):
-    with gzip.open(file_path, "at", encoding="utf-8") as f:
-        f.write(orjson.dumps(data).decode("utf-8") + "\n")
-
-
-def load_jsonl_gz(file_path):
-    data = []
+def load_jsonl_gz_as_dict(file_path):
+    data = defaultdict(list)
     if os.path.exists(file_path):
         with gzip.open(file_path, "rt", encoding="utf-8") as f:
-            for line in f:
-                data.append(orjson.loads(line))
+            data.update(orjson.loads(f.read()))
     return data
 
 
+def save_grouped_jsonl_gz(file_path, data):
+    with gzip.open(file_path, "wb") as f:
+        f.write(orjson.dumps(data))
+
+
 def load_existing_data():
-    palm_skeleton_data = load_jsonl_gz(PALM_JSONL_PATH)
-    body_skeleton_data = load_jsonl_gz(BODY_JSONL_PATH)
+    palm_skeleton_data = load_jsonl_gz_as_dict(PALM_JSONL_PATH)
+    body_skeleton_data = load_jsonl_gz_as_dict(BODY_JSONL_PATH)
+
+    processed_videos = set()
+    max_frame_count = 0
 
     if os.path.exists(CHECKPOINT_PATH):
-        with open(CHECKPOINT_PATH, "r") as checkpoint_file:
+        with open(CHECKPOINT_PATH, "rb") as checkpoint_file:
             try:
-                processed_videos = set(orjson.loads(checkpoint_file.read()))
+                checkpoint_data = orjson.loads(checkpoint_file.read())
+                processed_videos = set(checkpoint_data.get("processed_videos", []))
+                max_frame_count = checkpoint_data.get("max_frame_count", 0)
             except orjson.JSONDecodeError:
-                processed_videos = set()
-    else:
-        processed_videos = set()
+                pass
 
-    return palm_skeleton_data, body_skeleton_data, processed_videos
+    return palm_skeleton_data, body_skeleton_data, processed_videos, max_frame_count
 
 
-def save_checkpoint(processed_videos):
+def save_checkpoint(processed_videos, max_frame_count):
+    checkpoint_data = {
+        "processed_videos": list(processed_videos),
+        "max_frame_count": max_frame_count
+    }
     with open(CHECKPOINT_PATH, "wb") as checkpoint_file:
-        checkpoint_file.write(orjson.dumps(list(processed_videos)))
+        checkpoint_file.write(orjson.dumps(checkpoint_data))
 
 
-palm_skeleton_data, body_skeleton_data, processed_videos = load_existing_data()
+palm_skeleton_data, body_skeleton_data, processed_videos, MAX_FRAME_COUNT = load_existing_data()
+processed_count = 0
 
 for data in tqdm(data_processing.processed_data, ncols=100):
     video_path = data["video_path"]
@@ -140,24 +149,30 @@ for data in tqdm(data_processing.processed_data, ncols=100):
         continue
 
     try:
-        palm_landmarks, body_landmarks, frame_count = get_video_landmarks(video_path, start_frame, end_frame)
-        
+        palm_landmarks, body_landmarks, frame_count  = get_video_landmarks(video_path, start_frame, end_frame)
         palm_landmarks = np.around(palm_landmarks, decimals=5).tolist()
         body_landmarks = np.around(body_landmarks, decimals=5).tolist()
 
-        palm_skeleton_data.append({"gloss": gloss, "landmarks": palm_landmarks})
-        body_skeleton_data.append({"gloss": gloss, "landmarks": body_landmarks})
-
-        write_jsonl_gz(PALM_JSONL_PATH, {"gloss": gloss, "landmarks": palm_landmarks})
-        write_jsonl_gz(BODY_JSONL_PATH, {"gloss": gloss, "landmarks": body_landmarks})
+        palm_skeleton_data[gloss].append(palm_landmarks)
+        body_skeleton_data[gloss].append(body_landmarks)
 
         MAX_FRAME_COUNT = max(MAX_FRAME_COUNT, frame_count)
 
         processed_videos.add(video_path)
-        save_checkpoint(processed_videos)
+        processed_count += 1
+
+        if processed_count % SAVE_EVERY_N_VIDEOS == 0:
+            save_grouped_jsonl_gz(PALM_JSONL_PATH, palm_skeleton_data)
+            save_grouped_jsonl_gz(BODY_JSONL_PATH, body_skeleton_data)
+            save_checkpoint(processed_videos, MAX_FRAME_COUNT)
+            print(f"Saved progress after {processed_count} videos.")
 
     except Exception as e:
         print(f"\nError processing video {video_path}: {e}")
+
+save_grouped_jsonl_gz(PALM_JSONL_PATH, palm_skeleton_data)
+save_grouped_jsonl_gz(BODY_JSONL_PATH, body_skeleton_data)
+save_checkpoint(processed_videos, MAX_FRAME_COUNT)
 
 print(f"Processed landmarks for {len(palm_skeleton_data)} glosses.")
 print(f"Maximum frame count encountered: {MAX_FRAME_COUNT}")
