@@ -172,6 +172,14 @@ for data in tqdm(data_processing.processed_data, ncols=100):
         palm_skeleton_data[gloss].append(palm_landmarks)
         body_skeleton_data[gloss].append(body_landmarks)
 		
+        augmented = data_aug.augment_skeleton_sequence(palm_landmarks)
+        for aug in augmented:
+            palm_skeleton_data[gloss].append(aug)
+
+        augmented = data_aug.augment_skeleton_sequence(body_landmarks)
+        for aug in augmented:
+            body_skeleton_data[gloss].append(aug)
+
         total_skeleton_data[gloss].append([i + j for i, j in zip(palm_landmarks, body_landmarks)])
 
         MAX_FRAME_COUNT = max(MAX_FRAME_COUNT, frame_count)
