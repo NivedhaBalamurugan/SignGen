@@ -92,6 +92,7 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
 
             all_palm_landmarks.append(palm_landmarks.tolist())
             all_body_landmarks.append(body_landmarks.tolist())
+			
 
     cap.release()
     return all_palm_landmarks, all_body_landmarks, frame_count
@@ -140,6 +141,7 @@ def save_checkpoint(processed_videos, max_frame_count):
 
 palm_skeleton_data, body_skeleton_data, processed_videos, MAX_FRAME_COUNT = load_existing_data()
 processed_count = 0
+total_skeleton_data = defaultdict(list)
 
 for data in tqdm(data_processing.processed_data, ncols=100):
     video_path = data["video_path"]
@@ -157,6 +159,9 @@ for data in tqdm(data_processing.processed_data, ncols=100):
 
         palm_skeleton_data[gloss].append(palm_landmarks)
         body_skeleton_data[gloss].append(body_landmarks)
+		
+		for i,j in zip(palm_landmarks, body_landmarks):
+			total_skeleton_data[gloss].append(i+j)
 
         MAX_FRAME_COUNT = max(MAX_FRAME_COUNT, frame_count)
 
