@@ -152,6 +152,10 @@ for data in tqdm(data_processing.processed_data, ncols=100):
     if video_path in processed_videos:
         continue
 
+    if gloss not in palm_skeleton_data:
+        palm_skeleton_data[gloss] = []
+        body_skeleton_data[gloss] = []
+
     try:
         palm_landmarks, body_landmarks, frame_count  = get_video_landmarks(video_path, start_frame, end_frame)
         palm_landmarks = np.around(palm_landmarks, decimals=5).tolist()
@@ -160,8 +164,7 @@ for data in tqdm(data_processing.processed_data, ncols=100):
         palm_skeleton_data[gloss].append(palm_landmarks)
         body_skeleton_data[gloss].append(body_landmarks)
 		
-		for i,j in zip(palm_landmarks, body_landmarks):
-			total_skeleton_data[gloss].append(i+j)
+        total_skeleton_data[gloss].append([i + j for i, j in zip(palm_landmarks, body_landmarks)])
 
         MAX_FRAME_COUNT = max(MAX_FRAME_COUNT, frame_count)
 
