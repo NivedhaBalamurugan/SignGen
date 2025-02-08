@@ -139,6 +139,18 @@ def save_checkpoint(processed_videos, max_frame_count):
         checkpoint_file.write(orjson.dumps(checkpoint_data))
 
 
+def padding(total_skeleton_data, MAX_FRAME_COUNT):
+    
+    padded_total_skeleton_data = defaultdict(list)
+
+    for gloss, videos in total_skeleton_data.items():
+        for video in videos:
+            padding = [[0,0,0]] * (MAX_FRAME_COUNT - len(video))
+            padded_video = video + padding
+            padded_total_skeleton_data[gloss].append(padded_video)
+    return padded_total_skeleton_data 
+
+
 palm_skeleton_data, body_skeleton_data, processed_videos, MAX_FRAME_COUNT = load_existing_data()
 processed_count = 0
 total_skeleton_data = defaultdict(list)
@@ -151,10 +163,6 @@ for data in tqdm(data_processing.processed_data, ncols=100):
 
     if video_path in processed_videos:
         continue
-
-    if gloss not in palm_skeleton_data:
-        palm_skeleton_data[gloss] = []
-        body_skeleton_data[gloss] = []
 
     try:
         palm_landmarks, body_landmarks, frame_count  = get_video_landmarks(video_path, start_frame, end_frame)
@@ -179,6 +187,10 @@ for data in tqdm(data_processing.processed_data, ncols=100):
 
     except Exception as e:
         print(f"\nError processing video {video_path}: {e}")
+
+
+padded_total_skeleton_data = padding(total_skeleton_data, MAX_FRAME_COUNT)   
+            
 
 save_grouped_jsonl_gz(PALM_JSONL_PATH, palm_skeleton_data)
 save_grouped_jsonl_gz(BODY_JSONL_PATH, body_skeleton_data)
