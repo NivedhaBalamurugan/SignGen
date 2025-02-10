@@ -274,108 +274,108 @@ hand_to_body = [(21,3), (0,2) ]
 J2 = np.array(J2)  # Hand keypoints for frame 22 (both left and right hands)
 J1 = np.array(J1)  # Body keypoints for frame 22
 
-augJ2 = data_aug.augment_skeleton_sequence(J2)
-augJ1 = data_aug.augment_skeleton_sequence(J1)
+# augJ2 = data_aug.augment_skeleton_sequence(J2)
+# augJ1 = data_aug.augment_skeleton_sequence(J1)
 
 
-print("original")
-print(J1)
+# print("original")
+# print(J1)
 
-print("aug")
-print(augJ1)
+# print("aug")
+# print(augJ1)
 
 J2_proj = J2[:, :2]
 J1_proj = J1[:, :2]
 
-augJ2_proj = augJ2[:, :2]
-augJ1_proj = augJ1[:, :2]
+# augJ2_proj = augJ2[:, :2]
+# augJ1_proj = augJ1[:, :2]
 
 J2_proj[:, 1] = -J2_proj[:, 1]
 J1_proj[:, 1] = -J1_proj[:, 1]
 
-augJ2_proj[:, 1] = -augJ2_proj[:, 1]
-augJ1_proj[:, 1] = -augJ1_proj[:, 1]
+# augJ2_proj[:, 1] = -augJ2_proj[:, 1]
+# augJ1_proj[:, 1] = -augJ1_proj[:, 1]
 
 
-# Midpoints
-midpoint_orig = (J1_proj[0] + J1_proj[1]) / 2
-midpoint_aug = (augJ1_proj[0] + augJ1_proj[1]) / 2
+# # Midpoints
+# midpoint_orig = (J1_proj[0] + J1_proj[1]) / 2
+# midpoint_aug = (augJ1_proj[0] + augJ1_proj[1]) / 2
 
-# Create the figure
-plt.figure(figsize=(8, 8))
-plt.gca().set_aspect('equal', adjustable='box')
+# # Create the figure
+# plt.figure(figsize=(8, 8))
+# plt.gca().set_aspect('equal', adjustable='box')
 
-# ============ PLOT ORIGINAL LANDMARKS ============
-plt.scatter(J2_proj[:21, 0], J2_proj[:21, 1], color='blue', s=10, label="Original Left Hand")  
-plt.scatter(J2_proj[21:, 0], J2_proj[21:, 1], color='red', s=10, label="Original Right Hand")  
-plt.scatter(J1_proj[:, 0], J1_proj[:, 1], color='black', s=15, label="Original Body")
+# # ============ PLOT ORIGINAL LANDMARKS ============
+# plt.scatter(J2_proj[:21, 0], J2_proj[:21, 1], color='blue', s=10, label="Original Left Hand")  
+# plt.scatter(J2_proj[21:, 0], J2_proj[21:, 1], color='red', s=10, label="Original Right Hand")  
+# plt.scatter(J1_proj[:, 0], J1_proj[:, 1], color='black', s=15, label="Original Body")
 
-# ============ PLOT AUGMENTED LANDMARKS ============
-plt.scatter(augJ2_proj[:21, 0], augJ2_proj[:21, 1], color='purple', s=10, label="Augmented Left Hand")  
-plt.scatter(augJ2_proj[21:, 0], augJ2_proj[21:, 1], color='orange', s=10, label="Augmented Right Hand")  
-plt.scatter(augJ1_proj[:, 0], augJ1_proj[:, 1], color='green', s=15, label="Augmented Body")
+# # ============ PLOT AUGMENTED LANDMARKS ============
+# plt.scatter(augJ2_proj[:21, 0], augJ2_proj[:21, 1], color='purple', s=10, label="Augmented Left Hand")  
+# plt.scatter(augJ2_proj[21:, 0], augJ2_proj[21:, 1], color='orange', s=10, label="Augmented Right Hand")  
+# plt.scatter(augJ1_proj[:, 0], augJ1_proj[:, 1], color='green', s=15, label="Augmented Body")
 
-# ============ PLOT CONNECTIONS (Original) ============
-for start, end in hand_connections:
-    plt.plot([J2_proj[start, 0], J2_proj[end, 0]], 
-             [J2_proj[start, 1], J2_proj[end, 1]], 
-             color='green', linewidth=1)
+# # ============ PLOT CONNECTIONS (Original) ============
+# for start, end in hand_connections:
+#     plt.plot([J2_proj[start, 0], J2_proj[end, 0]], 
+#              [J2_proj[start, 1], J2_proj[end, 1]], 
+#              color='green', linewidth=1)
 
-for start, end in hand_connections:
-    start += 21
-    end += 21
-    plt.plot([J2_proj[start, 0], J2_proj[end, 0]], 
-             [J2_proj[start, 1], J2_proj[end, 1]], 
-             color='blue', linewidth=1)
+# for start, end in hand_connections:
+#     start += 21
+#     end += 21
+#     plt.plot([J2_proj[start, 0], J2_proj[end, 0]], 
+#              [J2_proj[start, 1], J2_proj[end, 1]], 
+#              color='blue', linewidth=1)
 
-for start, end in upper_body_connections:
-    plt.plot([J1_proj[start, 0], J1_proj[end, 0]], 
-             [J1_proj[start, 1], J1_proj[end, 1]], 
-             color='black', linewidth=2)
+# for start, end in upper_body_connections:
+#     plt.plot([J1_proj[start, 0], J1_proj[end, 0]], 
+#              [J1_proj[start, 1], J1_proj[end, 1]], 
+#              color='black', linewidth=2)
 
-for hand_idx, body_idx in hand_to_body:
-    plt.plot([J2_proj[hand_idx, 0], J1_proj[body_idx, 0]],  
-             [J2_proj[hand_idx, 1], J1_proj[body_idx, 1]], 
-             color='purple', linestyle="dashed", linewidth=1.5)
+# for hand_idx, body_idx in hand_to_body:
+#     plt.plot([J2_proj[hand_idx, 0], J1_proj[body_idx, 0]],  
+#              [J2_proj[hand_idx, 1], J1_proj[body_idx, 1]], 
+#              color='purple', linestyle="dashed", linewidth=1.5)
 
-# ============ PLOT CONNECTIONS (Augmented) ============
-for start, end in hand_connections:
-    plt.plot([augJ2_proj[start, 0], augJ2_proj[end, 0]], 
-             [augJ2_proj[start, 1], augJ2_proj[end, 1]], 
-             color='darkviolet', linewidth=1)
+# # ============ PLOT CONNECTIONS (Augmented) ============
+# for start, end in hand_connections:
+#     plt.plot([augJ2_proj[start, 0], augJ2_proj[end, 0]], 
+#              [augJ2_proj[start, 1], augJ2_proj[end, 1]], 
+#              color='darkviolet', linewidth=1)
 
-for start, end in hand_connections:
-    start += 21
-    end += 21
-    plt.plot([augJ2_proj[start, 0], augJ2_proj[end, 0]], 
-             [augJ2_proj[start, 1], augJ2_proj[end, 1]], 
-             color='orange', linewidth=1)
+# for start, end in hand_connections:
+#     start += 21
+#     end += 21
+#     plt.plot([augJ2_proj[start, 0], augJ2_proj[end, 0]], 
+#              [augJ2_proj[start, 1], augJ2_proj[end, 1]], 
+#              color='orange', linewidth=1)
 
-for start, end in upper_body_connections:
-    plt.plot([augJ1_proj[start, 0], augJ1_proj[end, 0]], 
-             [augJ1_proj[start, 1], augJ1_proj[end, 1]], 
-             color='green', linewidth=2)
+# for start, end in upper_body_connections:
+#     plt.plot([augJ1_proj[start, 0], augJ1_proj[end, 0]], 
+#              [augJ1_proj[start, 1], augJ1_proj[end, 1]], 
+#              color='green', linewidth=2)
 
-for hand_idx, body_idx in hand_to_body:
-    plt.plot([augJ2_proj[hand_idx, 0], augJ1_proj[body_idx, 0]],  
-             [augJ2_proj[hand_idx, 1], augJ1_proj[body_idx, 1]], 
-             color='darkred', linestyle="dashed", linewidth=1.5)
+# for hand_idx, body_idx in hand_to_body:
+#     plt.plot([augJ2_proj[hand_idx, 0], augJ1_proj[body_idx, 0]],  
+#              [augJ2_proj[hand_idx, 1], augJ1_proj[body_idx, 1]], 
+#              color='darkred', linestyle="dashed", linewidth=1.5)
 
-# Midpoint Connection
-plt.plot([J1_proj[6, 0], midpoint_orig[0]], 
-         [J1_proj[6, 1], midpoint_orig[1]], 
-         color='black', linewidth=2, label="Original 6th to Midpoint")
+# # Midpoint Connection
+# plt.plot([J1_proj[6, 0], midpoint_orig[0]], 
+#          [J1_proj[6, 1], midpoint_orig[1]], 
+#          color='black', linewidth=2, label="Original 6th to Midpoint")
 
-plt.plot([augJ1_proj[6, 0], midpoint_aug[0]], 
-         [augJ1_proj[6, 1], midpoint_aug[1]], 
-         color='green', linewidth=2, label="Augmented 6th to Midpoint")
+# plt.plot([augJ1_proj[6, 0], midpoint_aug[0]], 
+#          [augJ1_proj[6, 1], midpoint_aug[1]], 
+#          color='green', linewidth=2, label="Augmented 6th to Midpoint")
 
-# ============ AXES SETTINGS ============
-plt.title("Original vs Augmented Hand & Body Landmarks")
-plt.xlabel("X Coordinate")
-plt.ylabel("Y Coordinate")
-plt.grid(True)  # Show grid for better clarity
-plt.show()
+# # ============ AXES SETTINGS ============
+# plt.title("Original vs Augmented Hand & Body Landmarks")
+# plt.xlabel("X Coordinate")
+# plt.ylabel("Y Coordinate")
+# plt.grid(True)  # Show grid for better clarity
+# plt.show()
 
 
 # plt.figure(figsize=(6, 6))
@@ -398,54 +398,54 @@ plt.show()
 # plt.show()
 
 
-# midpoint = (J1_proj[0] + J1_proj[1]) / 2
+midpoint = (J1_proj[0] + J1_proj[1]) / 2
 
-# plt.figure(figsize=(6, 6))  # Adjust the figure size to maintain the aspect ratio
+plt.figure(figsize=(6, 6))  # Adjust the figure size to maintain the aspect ratio
 
-# plt.gca().set_aspect('equal', adjustable='box')
+plt.gca().set_aspect('equal', adjustable='box')
 
 
-# plt.scatter(J2_proj[:21, 0], J2_proj[:21, 1], color='blue', s=10, label="Left Hand")  # Left Hand
-# plt.scatter(J2_proj[21:, 0], J2_proj[21:, 1], color='purple', s=10, label="Right Hand")  # Right Hand
-# plt.scatter(J1_proj[:, 0], J1_proj[:, 1], color='red', s=15, label="Body Landmarks")
-# plt.scatter(midpoint[0], midpoint[1], color='cyan', s=15, label="Midpoint")  # Optional: Show midpoint
+plt.scatter(J2_proj[:21, 0], J2_proj[:21, 1], color='blue', s=10, label="Left Hand")  # Left Hand
+plt.scatter(J2_proj[21:, 0], J2_proj[21:, 1], color='purple', s=10, label="Right Hand")  # Right Hand
+plt.scatter(J1_proj[:, 0], J1_proj[:, 1], color='red', s=15, label="Body Landmarks")
+plt.scatter(midpoint[0], midpoint[1], color='cyan', s=15, label="Midpoint")  # Optional: Show midpoint
 
-# # Draw left-hand connections
-# for start, end in hand_connections:
-#     plt.plot([J2_proj[start, 0], J2_proj[end, 0]],
-#              [J2_proj[start, 1], J2_proj[end, 1]], 
-#              color='green', linewidth=1)
+# Draw left-hand connections
+for start, end in hand_connections:
+    plt.plot([J2_proj[start, 0], J2_proj[end, 0]],
+             [J2_proj[start, 1], J2_proj[end, 1]], 
+             color='green', linewidth=1)
 
-# # Draw right-hand connections (offset indices by +21)
-# for start, end in hand_connections:
-#     start += 21
-#     end += 21
-#     plt.plot([J2_proj[start, 0], J2_proj[end, 0]],
-#              [J2_proj[start, 1], J2_proj[end, 1]], 
-#              color='orange', linewidth=1)
+# Draw right-hand connections (offset indices by +21)
+for start, end in hand_connections:
+    start += 21
+    end += 21
+    plt.plot([J2_proj[start, 0], J2_proj[end, 0]],
+             [J2_proj[start, 1], J2_proj[end, 1]], 
+             color='orange', linewidth=1)
 
-# # Draw body connections
-# for start, end in upper_body_connections:
-#     plt.plot([J1_proj[start, 0], J1_proj[end, 0]],
-#              [J1_proj[start, 1], J1_proj[end, 1]], 
-#              color='black', linewidth=2)
+# Draw body connections
+for start, end in upper_body_connections:
+    plt.plot([J1_proj[start, 0], J1_proj[end, 0]],
+             [J1_proj[start, 1], J1_proj[end, 1]], 
+             color='black', linewidth=2)
 
-# # Draw hand-to-body connections correctly
-# for hand_idx, body_idx in hand_to_body:
-#     plt.plot([J2_proj[hand_idx, 0], J1_proj[body_idx, 0]],  # Hand index from J2, body index from J1
-#              [J2_proj[hand_idx, 1], J1_proj[body_idx, 1]], 
-#              color='purple', linestyle="dashed", linewidth=1.5)
+# Draw hand-to-body connections correctly
+for hand_idx, body_idx in hand_to_body:
+    plt.plot([J2_proj[hand_idx, 0], J1_proj[body_idx, 0]],  # Hand index from J2, body index from J1
+             [J2_proj[hand_idx, 1], J1_proj[body_idx, 1]], 
+             color='purple', linestyle="dashed", linewidth=1.5)
 
-# plt.plot([J1_proj[6, 0], midpoint[0]], 
-#          [J1_proj[6, 1], midpoint[1]], 
-#          color='black', linewidth=2, label="6th to Midpoint")
+plt.plot([J1_proj[6, 0], midpoint[0]], 
+         [J1_proj[6, 1], midpoint[1]], 
+         color='black', linewidth=2, label="6th to Midpoint")
 
-# plt.title("Projected Hand & Body Landmarks with Connections")
-# plt.axis("equal")
-# plt.xticks([])
-# plt.yticks([])
-# plt.legend()
-# plt.show()
+plt.title("Projected Hand & Body Landmarks with Connections")
+plt.axis("equal")
+plt.xticks([])
+plt.yticks([])
+plt.legend()
+plt.show()
 
 
 

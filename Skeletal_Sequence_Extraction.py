@@ -87,8 +87,8 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
             frame = process_frame(frame)
 
             palm_landmarks, body_landmarks = get_frame_landmarks(frame)
-            palm_landmarks = normalize_landmarks(palm_landmarks, frame.shape[1], frame.shape[0])
-            body_landmarks = normalize_landmarks(body_landmarks, frame.shape[1], frame.shape[0])
+            # palm_landmarks = normalize_landmarks(palm_landmarks, frame.shape[1], frame.shape[0])
+            # body_landmarks = normalize_landmarks(body_landmarks, frame.shape[1], frame.shape[0])
 
             all_palm_landmarks.append(palm_landmarks.tolist())
             all_body_landmarks.append(body_landmarks.tolist())
@@ -172,8 +172,8 @@ for data in tqdm(data_processing.processed_data, ncols=100):
         palm_skeleton_data[gloss].append(palm_landmarks)
         body_skeleton_data[gloss].append(body_landmarks)
 		
-        augmented = data_aug.augment_skeleton_sequence(palm_landmarks)
-        for aug in augmented:
+        all_augmented = data_aug.augment_skeleton_sequence(palm_landmarks)
+        for aug in all_augmented:
             palm_skeleton_data[gloss].append(aug)
 
         augmented = data_aug.augment_skeleton_sequence(body_landmarks)
@@ -204,5 +204,6 @@ save_grouped_jsonl_gz(PALM_JSONL_PATH, palm_skeleton_data)
 save_grouped_jsonl_gz(BODY_JSONL_PATH, body_skeleton_data)
 save_checkpoint(processed_videos, MAX_FRAME_COUNT)
 
-print(f"Processed landmarks for {len(palm_skeleton_data)} glosses.")
+print(f"Actual processed videos count (Before Augmentation)", processed_count)
+print(f"Total Processed videos count (After augmentation) ", len(palm_skeleton_data))
 print(f"Maximum frame count encountered: {MAX_FRAME_COUNT}")

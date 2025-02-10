@@ -1,9 +1,7 @@
 import json
 import os
 from tqdm import tqdm
-import matplotlib.pyplot as plt
-import seaborn as sns
-import cv2
+
 
 CHUNK_INDEX = 0
 
