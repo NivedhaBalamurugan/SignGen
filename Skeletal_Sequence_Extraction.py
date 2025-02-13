@@ -153,7 +153,6 @@ def padding(total_skeleton_data, MAX_FRAME_COUNT):
 
 palm_skeleton_data, body_skeleton_data, processed_videos, MAX_FRAME_COUNT = load_existing_data()
 processed_count = 0
-total_skeleton_data = defaultdict(list)
 
 gloss_count = 0 
 unique_glosses = set()
@@ -188,8 +187,6 @@ for data in tqdm(data_processing.processed_data, ncols=100):
         for aug in augmented:
             body_skeleton_data[gloss].append(aug)
 
-        total_skeleton_data[gloss].append([i + j for i, j in zip(palm_landmarks, body_landmarks)])
-
         MAX_FRAME_COUNT = max(MAX_FRAME_COUNT, frame_count)
 
         processed_videos.add(video_path)
@@ -203,9 +200,6 @@ for data in tqdm(data_processing.processed_data, ncols=100):
 
     except Exception as e:
         print(f"\nError processing video {video_path}: {e}")
-
-
-padded_total_skeleton_data = padding(total_skeleton_data, MAX_FRAME_COUNT)   
             
 
 save_grouped_jsonl_gz(PALM_JSONL_PATH, palm_skeleton_data)
