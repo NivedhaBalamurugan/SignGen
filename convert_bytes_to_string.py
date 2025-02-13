@@ -12,5 +12,6 @@ def convert_bytes_to_string(input_file, output_file):
             
             outfile.write(json_string + "\n")
 
-convert_bytes_to_string(f"{CHUNK_INDEX}_palm_landmarks.jsonl.gz", f"{CHUNK_INDEX}_str_palm_landmarks.jsonl")
-convert_bytes_to_string(f"{CHUNK_INDEX}_body_landmarks.jsonl.gz", f"{CHUNK_INDEX}_str_body_landmarks.jsonl")
+#convert_bytes_to_string(f"{CHUNK_INDEX}_palm_landmarks.jsonl.gz", f"{CHUNK_INDEX}_str_palm_landmarks.jsonl")
+#convert_bytes_to_string(f"{CHUNK_INDEX}_body_landmarks.jsonl.gz", f"{CHUNK_INDEX}_str_body_landmarks.jsonl")
+convert_bytes_to_string(f"{CHUNK_INDEX}_landmarks.jsonl.gz", f"{CHUNK_INDEX}_str_landmarks.jsonl")

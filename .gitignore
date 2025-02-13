@@ -4,6 +4,12 @@ output_frames/
 
 [0-9]_body_landmarks.json
 [0-9]_body_landmarks.jsonl.gz
+[0-9]_str_body_landmarks.jsonl
 [0-9]_palm_landmarks.json
 [0-9]_palm_landmarks.jsonl.gz
+[0-9]_str_palm_landmarks.jsonl
 [0-9]_checkpoint.json
+[0-9]_body_landmarks.jsonl
+[0-9]_landmarks.jsonl.gz
+[0-9]_str_landmarks.jsonl
+
