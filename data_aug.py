@@ -16,24 +16,14 @@ def scale_landmarks(landmarks, scale_x=1.2, scale_y=1.2, scale_z=1.0):
     scaling_matrix = np.array([scale_x, scale_y, scale_z])
     return landmarks * scaling_matrix
 
-def augment_skeleton_sequence(video_landmarks):
+def augment_skeleton_sequence(frame_landmarks):
    
-    sheared = []
-    translated = []
-    scaled = []
+    landmarks = np.array(frame_landmarks)
+    shearing = shear_landmarks(landmarks)
+    translation = translate_landmarks(landmarks)
+    scaling = scale_landmarks(landmarks)
+
+    return shearing, translation, scaling 
     
-    for frame in video_landmarks:
-
-        landmarks = np.array(frame)
-        shearing = shear_landmarks(landmarks)
-        translation = translate_landmarks(landmarks)
-        scaling = scale_landmarks(landmarks)
-
-        sheared.append(shearing.tolist())
-        translated.append(translation.tolist())
-        scaled.append(scaling.tolist())       
-
-    augmented = [sheared, translated, scaled ]
-    return augmented
 
 

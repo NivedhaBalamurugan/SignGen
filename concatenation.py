@@ -2,6 +2,7 @@ import os
 import gzip
 import orjson
 from collections import defaultdict
+import data_aug 
 
 CHUNK_INDEX = 0
 
@@ -24,10 +25,21 @@ def merge_landmarks(body_data, palm_data):
     for word in set(body_data.keys()).union(palm_data.keys()):
         for body_video, palm_video in zip(body_data[word], palm_data[word]):
             merged_video = []
+            sheared_merged_video = []
+            translated_merged_video = []
+            scaled_merged_video = []
             for body_frame, palm_frame in zip(body_video, palm_video):
                 merged_frame = body_frame + palm_frame
                 merged_video.append(merged_frame)
+                sheared_merged_frame, translated_merged_frame, scaled_merged_frame = data_aug.augment_skeleton_sequence(merged_frame)
+                sheared_merged_video.append(sheared_merged_frame)
+                translated_merged_video.append(translated_merged_frame)
+                scaled_merged_video.append(scaled_merged_frame)
+
             merged_data[word].append(merged_video)
+            merged_data[word].append(sheared_merged)
+            merged_data[word].append(translated_merged_video)
+            merged_data[word].append(scaled_merged_video)
     return merged_data
 
 def save_jsonl_gz(file_path, data):

@@ -154,19 +154,12 @@ def padding(total_skeleton_data, MAX_FRAME_COUNT):
 palm_skeleton_data, body_skeleton_data, processed_videos, MAX_FRAME_COUNT = load_existing_data()
 processed_count = 0
 
-gloss_count = 0 
-unique_glosses = set()
 
 for data in tqdm(data_processing.processed_data, ncols=100):
     video_path = data["video_path"]
     start_frame = data["frame_start"]
     end_frame = data["frame_end"]
     gloss = data["gloss"]
-
-    if gloss not in unique_glosses:
-        if len(unique_glosses) > 1000:
-            continue
-        unique_glosses.add(gloss)
 
     if video_path in processed_videos:
         continue
@@ -178,14 +171,6 @@ for data in tqdm(data_processing.processed_data, ncols=100):
 
         palm_skeleton_data[gloss].append(palm_landmarks)
         body_skeleton_data[gloss].append(body_landmarks)
-		
-        all_augmented = data_aug.augment_skeleton_sequence(palm_landmarks)
-        for aug in all_augmented:
-            palm_skeleton_data[gloss].append(aug)
-
-        augmented = data_aug.augment_skeleton_sequence(body_landmarks)
-        for aug in augmented:
-            body_skeleton_data[gloss].append(aug)
 
         MAX_FRAME_COUNT = max(MAX_FRAME_COUNT, frame_count)
 
