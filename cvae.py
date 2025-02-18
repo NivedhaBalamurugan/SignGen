@@ -130,8 +130,7 @@ class Encoder(nn.Module):
         self.fc_mu = nn.Linear(hidden_dim * 4, latent_dim)
         self.fc_logvar = nn.Linear(hidden_dim * 4, latent_dim)
 
-        # Define BatchNorm layers correctly
-        self.batch_norm_hidden = nn.BatchNorm1d(hidden_dim * 2)  # For LSTM outputs
+        self.batch_norm_hidden = nn.BatchNorm1d(hidden_dim * 2)  
         self.dropout = nn.Dropout(p=dropout_prob)
 
     def forward(self, x):
@@ -140,20 +139,15 @@ class Encoder(nn.Module):
         mask = (x.sum(dim=2) != 0).float()
         outputs, (h_n, _) = self.lstm(x)
 
-        # Apply batch norm to LSTM outputs
-        outputs = outputs.permute(0, 2, 1)  # (batch_size, hidden_dim * 2, seq_length)
-        outputs = self.batch_norm_hidden(outputs)  # Apply BatchNorm
-        outputs = outputs.permute(0, 2, 1)  # Back to (batch_size, seq_length, hidden_dim * 2)
-
-        # Applying dropout
+        outputs = outputs.permute(0, 2, 1) 
+        outputs = self.batch_norm_hidden(outputs)  
+        outputs = outputs.permute(0, 2, 1)  
         outputs = self.dropout(outputs)
 
-        # Attention mechanism
         context, attn_weights = self.attention(outputs, mask)
 
         mu = self.fc_mu(torch.cat([outputs.mean(dim=1), context], dim=-1))
         logvar = self.fc_logvar(torch.cat([outputs.mean(dim=1), context], dim=-1))
-
 
         std = torch.exp(0.5 * logvar)
         z = mu + std * torch.randn_like(std)
@@ -168,9 +162,9 @@ class Decoder(nn.Module):
         self.fc = nn.Linear(latent_dim + cond_dim, latent_dim + cond_dim)
         self.lstm = nn.LSTM(latent_dim + cond_dim, hidden_dim, batch_first=True)
         self.fc_out = nn.Linear(hidden_dim, output_dim)
-        self.batch_norm = nn.BatchNorm1d(hidden_dim)  # Batch Normalization after LSTM output
-        self.dropout = nn.Dropout(p=dropout_prob)  # Adding dropout to Decoder
-    
+        self.batch_norm = nn.BatchNorm1d(hidden_dim)  
+        self.dropout = nn.Dropout(p=dropout_prob)  
+
     def forward(self, z, cond):
         B = z.size(0)
         z_cond = torch.cat([z, cond], dim=-1)
@@ -179,15 +173,12 @@ class Decoder(nn.Module):
         z_seq = z_cond.unsqueeze(1).repeat(1, self.seq_len, 1)
         outputs, _ = self.lstm(z_seq)
         
-        # Applying dropout
         z_cond = self.dropout(z_cond)
         
-        # Reshape outputs for BatchNorm (batch_size, features, sequence_length)
-        outputs = outputs.permute(0, 2, 1)  # Change to (batch_size, hidden_dim, sequence_length)
-        outputs = self.batch_norm(outputs)  # Apply BatchNorm
-        outputs = outputs.permute(0, 2, 1)  # Change back to (batch_size, sequence_length, hidden_dim)
+        outputs = outputs.permute(0, 2, 1)  
+        outputs = self.batch_norm(outputs)  
+        outputs = outputs.permute(0, 2, 1)  
         
-        # Applying dropout before the final output layer
         outputs = self.dropout(outputs)
         
         recon_seq = torch.tanh(self.fc_out(outputs))
@@ -312,8 +303,8 @@ cond_dim = dataset.embedding_dim
 
 print("\nInitializing model...")
 
-train_size = int(0.8 * len(dataset))  # 80% training
-val_size = len(dataset) - train_size  # 20% validation
+train_size = int(0.8 * len(dataset))  
+val_size = len(dataset) - train_size  
 
 train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
