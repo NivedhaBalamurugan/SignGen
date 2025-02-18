@@ -6,8 +6,10 @@ Dataset folder structure
 ├── repository/
 │ ├── Dataset/
 │ │ ├── videos/
-│ │ │ └──[...]
-│ │ └── missing.txt/
+│ │ | └──[...]
+│ │ └── missing.txt
 | | └── wlasl_class_list.txt
 | | └── WLASL_v0.3.json
+| | ├── Glove/
+| | | └── glove.6B.50d.txt
 ```
