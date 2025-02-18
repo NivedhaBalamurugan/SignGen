@@ -42,7 +42,7 @@ class LandmarkDataset(Dataset):
         self._process_data(raw_data)
         print(f"Dataset processing complete. Max sequence length: {self.max_frames}, Vocabulary size: {len(self.vocab)}")
 
-    def _load_data(self, file_path):
+    def _load_data(self, file_path):        #modify to read the data from all concatenated chunks
         raw_data = defaultdict(list)
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"{file_path} does not exist")
