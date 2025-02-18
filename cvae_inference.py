@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import os
 from cvae import ConditionalVAE  
+import show_output
 
 def embedding_for_word(input_word, filepath='Dataset/Glove/glove.6B.50d.txt', embedding_dim=50):
 
@@ -62,5 +63,7 @@ if __name__ == "__main__":
     GLOVE_PATH = "Dataset/Glove/glove.6B.50d.txt"
     generated_skeleton = generate_sequence(asl_word, model, GLOVE_PATH, SEQ_LEN)
 
-    print(f"Generated skeleton sequence for '{asl_word}':")
-    print(generated_skeleton.shape)  
+    print(f"Generated sequence shape: {generated_skeleton.shape}")
+    show_output.save_generated_sequence(generated_skeleton, "Dataset/output_sequence") 
+
+

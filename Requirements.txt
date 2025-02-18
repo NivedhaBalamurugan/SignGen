@@ -7,3 +7,8 @@ pandas
 seaborn
 scikit-learn
 tensorflow
+torch
+torchvision
+torchaudio
+gzip
+ffmpeg
