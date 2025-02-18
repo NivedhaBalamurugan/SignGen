@@ -8,6 +8,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import Dataset, DataLoader
+from torch.cuda.amp import GradScaler, autocast
+
 
 def load_glove_embeddings(filepath, embedding_dim=50):
     print(f"Loading GloVe embeddings from {filepath}...")
@@ -306,11 +308,19 @@ SEQ_LEN = dataset.max_frames
 print(f"Max frame count (sequence length): {SEQ_LEN}")
 print("Vocabulary:", dataset.vocab)
 
-dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
-
 cond_dim = dataset.embedding_dim  
 
 print("\nInitializing model...")
+
+train_size = int(0.8 * len(dataset))  # 80% training
+val_size = len(dataset) - train_size  # 20% validation
+
+train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = ConditionalVAE(
     input_dim=INPUT_DIM,
@@ -322,7 +332,7 @@ model = ConditionalVAE(
 ).to(device)
 
 print("\nModel initialized. Starting training...\n")
-train(model, dataloader, device, num_epochs=100, lr=0.001)
+train(model, train_loader, val_loader, device, num_epochs=100, lr=0.001)
 
 torch.save({
     'model_state_dict': model.state_dict(),
