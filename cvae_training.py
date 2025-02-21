@@ -228,7 +228,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr):
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
     scaler = GradScaler()
     best_val_loss = float('inf')
-    patience = 5
+    patience = 10
     patience_counter = 0
 
     for epoch in range(num_epochs):
@@ -324,12 +324,6 @@ model = ConditionalVAE(
 
 print("\nModel initialized. Starting training...\n")
 train(model, train_loader, val_loader, device, num_epochs=100, lr=0.001)
-
-torch.save({
-    'model_state_dict': model.state_dict(),
-    'optimizer_state_dict': optimizer.state_dict(),
-    'latent_classifier_state_dict': model.latent_classifier.state_dict()
-}, "cvae_model.pth")
 
 print("Model saved successfully ")
 
