@@ -35,9 +35,9 @@ model = ConditionalVAE(
 
 
 
-checkpoint_path = "cvae_model.pth"
+checkpoint_path = "Dataset/cvae_best_model.pth"
 if not os.path.exists(checkpoint_path):
-    raise FileNotFoundError("Trained model file 'cvae_model.pth' not found.")
+    raise FileNotFoundError("Trained model file  not found.")
 
 checkpoint = torch.load(checkpoint_path, map_location=device)
 model.load_state_dict(checkpoint['model_state_dict'])
@@ -58,12 +58,18 @@ def generate_sequence(asl_word, model, glove_path, seq_len):
 
     return generated_sequence.squeeze(0).cpu().numpy()
 
-if __name__ == "__main__":
-    asl_word = "hello"
+# if __name__ == "__main__":
+#     asl_word = "hello"
+#     GLOVE_PATH = "Dataset/Glove/glove.6B.50d.txt"
+#     generated_skeleton = generate_sequence(asl_word, model, GLOVE_PATH, SEQ_LEN)
+
+#     print(f"Generated sequence shape: {generated_skeleton.shape}")
+#     show_output.save_generated_sequence(generated_skeleton, "Dataset/cvae_output_sequence") 
+
+def get_cvae_sequence(asl_word):
     GLOVE_PATH = "Dataset/Glove/glove.6B.50d.txt"
     generated_skeleton = generate_sequence(asl_word, model, GLOVE_PATH, SEQ_LEN)
 
     print(f"Generated sequence shape: {generated_skeleton.shape}")
-    show_output.save_generated_sequence(generated_skeleton, "Dataset/output_sequence") 
-
-
+    show_output.save_generated_sequence(generated_skeleton, "Dataset/cvae_output_sequence") 
+    return generated_skeleton

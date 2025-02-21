@@ -277,7 +277,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr):
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             patience_counter = 0
-            torch.save(model.state_dict(), "best_model.pth")
+            torch.save(model.state_dict(), "Dataset/cvae_best_model.pth")
         else:
             patience_counter += 1
             if patience_counter >= patience:
@@ -331,5 +331,5 @@ torch.save({
     'latent_classifier_state_dict': model.latent_classifier.state_dict()
 }, "cvae_model.pth")
 
-print("Model saved successfully as 'cvae_model.pth'")
+print("Model saved successfully ")
 
