@@ -2,11 +2,11 @@ import cv2
 import numpy as np
 import mediapipe as mp
 import orjson
-import gzip
 import os
 from tqdm import tqdm
 import data_processing
 from collections import defaultdict
+from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
 
 CHUNK_INDEX = 0
 
@@ -99,16 +99,11 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
 
 
 def load_jsonl_gz_as_dict(file_path):
-    data = defaultdict(list)
-    if os.path.exists(file_path):
-        with gzip.open(file_path, "rt", encoding="utf-8") as f:
-            data.update(orjson.loads(f.read()))
-    return data
+    return load_jsonl_gz(file_path, single_object=True)
 
 
 def save_grouped_jsonl_gz(file_path, data):
-    with gzip.open(file_path, "wb") as f:
-        f.write(orjson.dumps(data))
+    save_jsonl_gz(file_path, data, single_object=True)
 
 
 def load_existing_data():
