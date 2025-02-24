@@ -10,5 +10,4 @@ tensorflow
 torch
 torchvision
 torchaudio
-gzip
 ffmpeg
