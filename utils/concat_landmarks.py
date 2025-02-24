@@ -27,4 +27,3 @@ def merge_landmarks(body_landmarks_path, palm_landmarks_path, merged_landmarks_p
         print(f"Merged landmarks saved to {merged_landmarks_path}.")
     except Exception as e:
         print(f"Error saving merged landmarks: {e}")
-    
