@@ -26,8 +26,8 @@ def load_glove_embeddings(filepath, embedding_dim=50):
     return embedding_dict
 
 class LandmarkDataset(Dataset):
-    def __init__(self, file_path, glove_path='Dataset/Glove/glove.6B.50d.txt', embedding_dim=50, transform=None):
-        print(f"Loading dataset from {file_path}...")
+    def __init__(self, file_paths, glove_path='Dataset/Glove/glove.6B.50d.txt', embedding_dim=50, transform=None):
+        print(f"Loading dataset from {file_paths}...")
         self.transform = transform
         self.data = []
         self.vocab = {}
@@ -37,20 +37,23 @@ class LandmarkDataset(Dataset):
 
         self.glove_embeddings = load_glove_embeddings(glove_path, embedding_dim)
         
-        raw_data = self._load_data(file_path)
+        raw_data = self._load_data(file_paths)
         print(f"Loaded {len(raw_data)} gloss entries.")
         self._process_data(raw_data)
         print(f"Dataset processing complete. Max sequence length: {self.max_frames}, Vocabulary size: {len(self.vocab)}")
 
-    def _load_data(self, file_path):        #modify to read the data from all concatenated chunks
+    def _load_data(self, file_paths):        
         raw_data = defaultdict(list)
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"{file_path} does not exist")
-        with open(file_path, "rb") as f:
-            for line in f:
-                item = orjson.loads(line)
-                for gloss, videos in item.items():
-                    raw_data[gloss].extend(videos)
+       
+        for file_path in file_paths:
+            with open(file_path, "rb") as f:
+                for line in f:
+                    try:
+                        item = orjson.loads(line)
+                        for gloss, videos in item.items():
+                            raw_data[gloss].extend(videos)
+                    except Exception as e:
+                        print(f"Error processing {file_path}: {e}")
         return raw_data
 
     def _process_data(self, raw_data):
@@ -290,7 +293,7 @@ INPUT_DIM = 147
 HIDDEN_DIM = 128
 LATENT_DIM = 64
 BATCH_SIZE = 16
-MERGED_JSONL_PATH = "Dataset/0_landmarks.jsonl"
+MERGED_JSONL_PATH = "Dataset/*.jsonl"
 
 print("\nInitializing dataset...")
 dataset = LandmarkDataset(MERGED_JSONL_PATH)
