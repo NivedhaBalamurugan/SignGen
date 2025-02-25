@@ -1,5 +1,6 @@
 import os
 import gzip
+import glob
 import orjson
 from collections import defaultdict
 import numpy as np
@@ -44,7 +45,7 @@ class LandmarkDataset(Dataset):
 
     def _load_data(self, file_paths):        
         raw_data = defaultdict(list)
-       
+        file_paths = glob.glob(file_paths)
         for file_path in file_paths:
             with open(file_path, "rb") as f:
                 for line in f:
