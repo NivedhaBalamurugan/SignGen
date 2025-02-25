@@ -202,7 +202,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-import data_aug
+import augmentation
 
 # #J1 = body J2 = palm
 
