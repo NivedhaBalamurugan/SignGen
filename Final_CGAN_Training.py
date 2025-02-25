@@ -19,20 +19,32 @@ MAX_FRAMES = 233
 NUM_JOINTS = 49
 NUM_COORDINATES = 3
 
-def load_skeleton_sequences(filepath):
+def load_skeleton_sequences(filepaths):
     skeleton_data = {}
-    with open(filepath, 'r') as file:
-        for line in file:
-            data = json.loads(line.strip())
-            word = list(data.keys())[0]
-            videos = data[word]
-            skeleton_data[word] = [pad_video(video, MAX_FRAMES) for video in videos]
+
+    for filepath in filepaths:
+        with open(filepath, 'r') as file:
+            for line in file:
+                try:
+                    data = json.loads(line.strip())
+                    word = list(data.keys())[0]
+                    videos = data[word]
+                    
+                    if word not in skeleton_data:
+                        skeleton_data[word] = []
+                    
+                  
+                    skeleton_data[word].extend([pad_video(video, MAX_FRAMES) for video in videos])
+
+                except Exception as e:
+                    print(f"Error processing {filepath}: {e}")
+
     return skeleton_data
 
 def pad_video(video, max_frames):
     padded_video = np.zeros((max_frames, NUM_JOINTS, NUM_COORDINATES))
-    video = np.array(video)[:max_frames]  # Trim if too long
-    padded_video[:video.shape[0], :, :] = video  # Copy existing frames
+    video = np.array(video)[:max_frames] 
+    padded_video[:video.shape[0], :, :] = video  
     return padded_video
 
 def build_generator():
@@ -56,15 +68,17 @@ def build_discriminator():
     ])
     return model
 
-# Load dataset
-word_embeddings = load_word_embeddings("Dataset/Glove/glove.6B.50d.txt")
-skeleton_data = load_skeleton_sequences("Dataset/0_landmarks.jsonl")
 
-# Filter words that exist in both the embeddings and dataset
+word_embeddings = load_word_embeddings("glove.6B.50d.txt")
+jsonl_files = glob.glob("Dataset/*.jsonl")  # Change it 
+skeleton_data = load_skeleton_sequences(jsonl_files)
+
+
+
 words = [word for word in skeleton_data.keys() if word in word_embeddings]
 word_vectors = np.array([word_embeddings[word] for word in words])
 
-# Flatten all videos per word and associate them with the word embedding
+
 all_skeleton_sequences = []
 all_word_vectors = []
 for word in words:
@@ -72,19 +86,19 @@ for word in words:
         all_skeleton_sequences.append(video)
         all_word_vectors.append(word_embeddings[word])
 
-# Convert to NumPy arrays
+
 all_skeleton_sequences = np.array(all_skeleton_sequences)
 all_word_vectors = np.array(all_word_vectors)
 
 print(f"Word Vectors Shape: {all_word_vectors.shape}")
 print(f"Skeleton Sequences Shape: {all_skeleton_sequences.shape}")
 
-# Model parameters
+
 EMBEDDING_DIM = all_word_vectors.shape[1]
 BATCH_SIZE = 32
 EPOCHS = 100
 
-# Build models
+
 generator = build_generator()
 discriminator = build_discriminator()
 
@@ -105,30 +119,29 @@ num_samples = all_word_vectors.shape[0]
 num_batches = max(1, num_samples // BATCH_SIZE)
 trimmed_size = num_batches * BATCH_SIZE
 
-# Trim dataset to be a multiple of batch size
+
 all_word_vectors = all_word_vectors[:trimmed_size]
 all_skeleton_sequences = all_skeleton_sequences[:trimmed_size]
 
 print(f"Final num_batches: {num_batches}")
 
 def train_step(word_vector, real_skeleton):
-    noise = tf.random.normal([BATCH_SIZE, NOISE_DIM], dtype=tf.float32)  # Ensure noise is float32
-    word_vector = tf.cast(word_vector, tf.float32)  # Cast word_vector to float32
+    noise = tf.random.normal([BATCH_SIZE, NOISE_DIM], dtype=tf.float32)  
+    word_vector = tf.cast(word_vector, tf.float32)
     generator_input = tf.concat([word_vector, noise], axis=1)
 
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
         generated_skeleton = generator(generator_input, training=True)
 
-        # Ensure all tensors are float32 before concatenation
+
         real_skeleton = tf.cast(real_skeleton, tf.float32)
         generated_skeleton = tf.cast(generated_skeleton, tf.float32)
 
-        # Expand word vector to match the number of joints
-        word_vector_expanded = tf.reshape(word_vector, (BATCH_SIZE, 1, 1, 50))  # Shape: (BATCH_SIZE, 1, 1, 50)
-        word_vector_expanded = tf.tile(word_vector_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])  # Expand to (BATCH_SIZE, MAX_FRAMES, NUM_JOINTS, 50)
 
-        # Concatenate for discriminator input
-        real_input = tf.concat([real_skeleton, word_vector_expanded], axis=-1)  # Final shape: (BATCH_SIZE, MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES + 50)
+        word_vector_expanded = tf.reshape(word_vector, (BATCH_SIZE, 1, 1, 50))  
+        word_vector_expanded = tf.tile(word_vector_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])  
+
+        real_input = tf.concat([real_skeleton, word_vector_expanded], axis=-1)  
         fake_input = tf.concat([generated_skeleton, word_vector_expanded], axis=-1)
 
         real_output = discriminator(real_input, training=True)
@@ -148,7 +161,7 @@ def train_step(word_vector, real_skeleton):
 
 
 
-# Training loop
+
 for epoch in range(EPOCHS):
     for i in range(num_batches):
         batch_indices = np.random.choice(trimmed_size, BATCH_SIZE, replace=False)
@@ -164,6 +177,6 @@ for epoch in range(EPOCHS):
 
     print(f"Epoch {epoch+1}/{EPOCHS} - Gen Loss: {gen_loss.numpy():.4f}, Disc Loss = {disc_loss.numpy():.4f}")
 
-# Save models
+
 generator.save("Dataset/Generator")
 discriminator.save("Dataset/Discriminator")
