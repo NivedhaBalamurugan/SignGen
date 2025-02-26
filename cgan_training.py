@@ -1,13 +1,60 @@
 import os
 import glob
-import tensorflow as tf
+import gc
+from tqdm import tqdm
+import psutil
 import numpy as np
+import tensorflow as tf
 from config import *
 from utils.data_utils import load_skeleton_sequences, prepare_training_data
 from utils.validation_utils import validate_data_shapes, validate_config
 from utils.model_utils import save_model_and_history, log_model_summary, log_training_config
 from utils.glove_utils import load_word_embeddings, validate_word_embeddings
 from architectures.cgan import build_generator, build_discriminator, discriminator_loss
+
+FILES_PER_BATCH = 2
+MAX_SAMPLES_PER_BATCH = 1000
+MEMORY_THRESHOLD = 85
+
+def check_memory():
+    memory_percent = psutil.Process().memory_percent()
+    if memory_percent > MEMORY_THRESHOLD:
+        logging.warning(f"Memory usage high ({memory_percent:.1f}%). Clearing memory...")
+        gc.collect()
+        return True
+    return False
+
+def process_file_batch(files, word_embeddings):
+    logging.info(f"Processing files: {[os.path.basename(f) for f in files]}")
+    
+    skeleton_data = load_skeleton_sequences(files)
+    if not skeleton_data:
+        return None, None
+    
+    sequences, vectors = prepare_training_data(skeleton_data, word_embeddings)
+    del skeleton_data
+    gc.collect()
+    
+    return sequences, vectors
+
+def process_data_batches(jsonl_files, word_embeddings):
+    total_sequences = []
+    total_vectors = []
+    
+    num_batches = -(-len(jsonl_files)//FILES_PER_BATCH)
+    with tqdm(total=num_batches, desc="Processing files") as pbar:
+        for i in range(0, len(jsonl_files), FILES_PER_BATCH):
+            file_batch = jsonl_files[i:i + FILES_PER_BATCH]
+            sequences, vectors = process_file_batch(file_batch, word_embeddings)
+            
+            if sequences is not None:
+                total_sequences.extend(sequences)
+                total_vectors.extend(vectors)
+            
+            check_memory()
+            pbar.update(1)
+            
+    return total_sequences, total_vectors
 
 def validate_data_shapes(word_vectors, skeleton_sequences):
     if word_vectors.shape[0] != skeleton_sequences.shape[0]:
@@ -32,6 +79,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     num_samples = word_vectors.shape[0]
     num_batches = max(1, num_samples // batch_size)
     trimmed_size = num_batches * batch_size
+    chunks_per_epoch = max(1, trimmed_size // MAX_SAMPLES_PER_BATCH)
 
     word_vectors = word_vectors[:trimmed_size]
     skeleton_sequences = skeleton_sequences[:trimmed_size]
@@ -79,30 +127,58 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         epoch_gen_loss = tf.keras.metrics.Mean()
         epoch_disc_loss = tf.keras.metrics.Mean()
         
-        for i in range(num_batches):
-            try:
-                batch_indices = np.random.choice(trimmed_size, batch_size, replace=False)
-                word_batch = word_vectors[batch_indices]
-                skeleton_batch = skeleton_sequences[batch_indices]
-
-                gen_loss, disc_loss = train_step(word_batch, skeleton_batch)
-                
-                epoch_gen_loss.update_state(gen_loss)
-                epoch_disc_loss.update_state(disc_loss)
-                
-                if (i + 1) % CGAN_LOG_INTERVAL == 0:
-                    logging.info(f"Batch {i+1}/{num_batches}: "
-                                 f"Gen Loss = {gen_loss:.4f}, "
-                                 f"Disc Loss = {disc_loss:.4f}")
-                    
-            except Exception as e:
-                logging.error(f"Error in training batch: {e}")
-                return False
+        for chunk_idx in range(chunks_per_epoch):
+            chunk_start = chunk_idx * MAX_SAMPLES_PER_BATCH
+            chunk_end = min(chunk_start + MAX_SAMPLES_PER_BATCH, trimmed_size)
             
-            # if epoch_gen_loss.result() > CGAN_MAX_GEN_LOSS or epoch_disc_loss.result() > CGAN_MAX_DISC_LOSS:
-            #     logging.error(f"Training stopped due to high losses at epoch {epoch+1}")
-            #     return False, history
-                            
+            word_vectors_chunk = word_vectors[chunk_start:chunk_end]
+            skeleton_sequences_chunk = skeleton_sequences[chunk_start:chunk_end]
+            
+            chunk_size = chunk_end - chunk_start
+            chunk_batches = max(1, chunk_size // batch_size)
+            
+            with tqdm(total=chunk_batches, 
+                     desc=f"Epoch {epoch+1}/{epochs} Chunk {chunk_idx+1}/{chunks_per_epoch}") as pbar:
+                
+                for i in range(chunk_batches):
+                    if check_memory():
+                        logging.info("Cleared memory during training")
+                    
+                    try:
+                        batch_indices = np.random.choice(chunk_size, batch_size, replace=False)
+                        word_batch = word_vectors_chunk[batch_indices]
+                        skeleton_batch = skeleton_sequences_chunk[batch_indices]
+
+                        gen_loss, disc_loss = train_step(word_batch, skeleton_batch)
+                        
+                        epoch_gen_loss.update_state(gen_loss)
+                        epoch_disc_loss.update_state(disc_loss)
+                        
+                        pbar.set_postfix({
+                            'gen_loss': f'{gen_loss:.4f}',
+                            'disc_loss': f'{disc_loss:.4f}'
+                        })
+                        pbar.update(1)
+                        
+                        global_batch = epoch * num_batches + chunk_idx * chunk_batches + i
+                        if (global_batch + 1) % (num_batches * 5) == 0:
+                            try:
+                                checkpoint_path = os.path.join(
+                                    os.path.dirname(CGAN_GEN_PATH), 
+                                    f"checkpoint_e{epoch}_c{chunk_idx}_b{i}.keras"
+                                )
+                                generator.save(checkpoint_path)
+                                logging.info(f"Saved checkpoint: {checkpoint_path}")
+                            except Exception as e:
+                                logging.error(f"Failed to save checkpoint: {e}")
+                        
+                    except Exception as e:
+                        logging.error(f"Error in training batch: {e}")
+                        continue
+            
+            del word_vectors_chunk, skeleton_sequences_chunk
+            gc.collect()
+        
         history['generator_loss'].append(epoch_gen_loss.result().numpy())
         history['discriminator_loss'].append(epoch_disc_loss.result().numpy())
 
@@ -123,18 +199,34 @@ def main():
     if not word_embeddings or not validate_word_embeddings(word_embeddings, CGAN_NOISE_DIM):
         return
 
-    jsonl_files = glob.glob(FINAL_JSONL_PATHS)
+    jsonl_files = sorted(glob.glob(FINAL_JSONL_PATHS))
     if not jsonl_files:
         logging.error(f"No JSONL files found matching pattern: {FINAL_JSONL_PATHS}")
         return
 
-    skeleton_data = load_skeleton_sequences(jsonl_files)
-    if not skeleton_data:
+    total_sequences = []
+    total_vectors = []
+    
+    for i in range(0, len(jsonl_files), FILES_PER_BATCH):
+        file_batch = jsonl_files[i:i + FILES_PER_BATCH]
+        logging.info(f"Processing batch {i//FILES_PER_BATCH + 1}/{-(-len(jsonl_files)//FILES_PER_BATCH)}")
+        
+        sequences, vectors = process_file_batch(file_batch, word_embeddings)
+        if sequences is not None:
+            total_sequences.extend(sequences)
+            total_vectors.extend(vectors)
+        
+        check_memory()
+    
+    if not total_sequences:
+        logging.error("No valid sequences loaded")
         return
 
-    all_skeleton_sequences, all_word_vectors = prepare_training_data(skeleton_data, word_embeddings)
-    if all_skeleton_sequences is None:
-        return
+    all_skeleton_sequences = np.array(total_sequences)
+    all_word_vectors = np.array(total_vectors)
+    
+    del total_sequences, total_vectors, word_embeddings
+    gc.collect()
 
     generator = build_generator()
     discriminator = build_discriminator()
@@ -143,15 +235,19 @@ def main():
     log_model_summary(discriminator, "Discriminator")
     log_training_config()
 
-    success, history = train_gan(generator, discriminator, 
-                               all_word_vectors, all_skeleton_sequences,
-                               epochs=CGAN_EPOCHS, batch_size=CGAN_BATCH_SIZE)
+    try:
+        success, history = train_gan(generator, discriminator, 
+                                   all_word_vectors, all_skeleton_sequences,
+                                   epochs=CGAN_EPOCHS, batch_size=CGAN_BATCH_SIZE)
 
-    if success:
-        save_model_and_history(CGAN_GEN_PATH, generator, history)
-        save_model_and_history(CGAN_DIS_PATH, discriminator)
-    else:
-        logging.error("Training failed, models not saved")
+        if success:
+            save_model_and_history(CGAN_GEN_PATH, generator, history)
+            save_model_and_history(CGAN_DIS_PATH, discriminator)
+        else:
+            logging.error("Training failed, models not saved")
+    except Exception as e:
+        logging.error(f"Training error: {e}")
+        return
 
 if __name__ == "__main__":
     main()

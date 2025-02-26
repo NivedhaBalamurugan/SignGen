@@ -40,7 +40,7 @@ def get_paths(chunk_index=0):
     }
 
 # Final landmarks paths
-FINAL_JSONL_PATHS = os.path.join(FINAL_PATH, "*.jsonl.gz")
+FINAL_JSONL_PATHS = os.path.join(FINAL_PATH, "*.jsonl")
 
 # Model paths
 CGAN_GEN_PATH = os.path.join(MODELS_PATH, "cgan_generator.keras")
