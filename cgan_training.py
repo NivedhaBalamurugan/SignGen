@@ -1,6 +1,7 @@
+import glob
+import json
 import tensorflow as tf
 import numpy as np
-import json
 from keras.models import Sequential
 from keras.layers import GRU, Dense, Input, RepeatVector, Reshape
 
