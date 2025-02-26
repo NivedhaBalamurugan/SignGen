@@ -8,10 +8,10 @@ def merge_chunk(index):
         return
 
     os.makedirs(MERGED_PATH, exist_ok=True)
-    body_json_path = BODY_JSONL_PATH.replace(f"{CHUNK_INDEX}", f"{index}")
-    palm_json_path = PALM_JSONL_PATH.replace(f"{CHUNK_INDEX}", f"{index}")
-    merged_json_path = MERGED_JSONL_PATH.replace(f"{CHUNK_INDEX}", f"{index}")
-
+    paths = get_paths(index)
+    body_json_path = paths['body_jsonl']
+    palm_json_path = paths['palm_jsonl']
+    merged_json_path = paths['merged_jsonl']
     merge_landmarks(body_json_path, palm_json_path, merged_json_path)
     logging.info(f"Chunk {index} merged and saved to {merged_json_path}")
 

@@ -10,7 +10,7 @@ Project folder structure
 | │ │ ├── merged/
 | │ │ ├── final/
 │ │ ├── videos/
-| | ├── Glove/
+| | ├── glove/
 | | | └── glove.6B.50d.txt
 │ │ └── chunks.json
 │ │ └── missing.txt

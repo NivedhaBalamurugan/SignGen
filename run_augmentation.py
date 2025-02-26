@@ -98,8 +98,11 @@ def main():
     os.makedirs(AUGMENTED_PATH, exist_ok=True)
 
     for i in range(10):
-        input_path = MERGED_JSONL_PATH.replace(f"{CHUNK_INDEX}", f"{i}")
-        output_path = AUGMENTED_JSONL_PATH.replace(f"{CHUNK_INDEX}", f"{i}")
+        paths = get_paths(i)
+        merged_json_path = paths['merged_jsonl']
+        augmented_json_path = paths['augmented_jsonl']
+        input_path = merged_json_path
+        output_path = augmented_json_path
         augment_and_save(input_path, output_path)
 
 if __name__ == "__main__":
