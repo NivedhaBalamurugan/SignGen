@@ -8,6 +8,7 @@ Project folder structure
 │ │ ├── landmarks/
 | │ │ ├── augmented/
 | │ │ ├── merged/
+| │ │ ├── palm_body/
 | │ │ ├── final/
 │ │ ├── videos/
 | | ├── glove/

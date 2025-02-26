@@ -9,6 +9,12 @@ from collections import defaultdict
 from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
 from config import *
 
+CHUNK_INDEX = 0
+paths = get_paths(CHUNK_INDEX)
+PALM_JSONL_PATH = paths['palm_jsonl']
+BODY_JSONL_PATH = paths['body_jsonl']
+CHECKPOINT_PATH = paths['checkpoint']
+
 MAX_FRAME_COUNT = 0
 SAVE_EVERY_N_VIDEOS = 10
 NUM_LANDMARKS = 21 + 21 + 6 + 1
