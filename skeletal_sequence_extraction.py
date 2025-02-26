@@ -7,14 +7,7 @@ from tqdm import tqdm
 import data_processing
 from collections import defaultdict
 from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
-
-CHUNK_INDEX = 0
-
-FP_PRECSION = np.float32
-
-PALM_JSONL_PATH = f"{CHUNK_INDEX}_palm_landmarks.jsonl.gz"
-BODY_JSONL_PATH = f"{CHUNK_INDEX}_body_landmarks.jsonl.gz"
-CHECKPOINT_PATH = f"{CHUNK_INDEX}_checkpoint.json"
+from config import *
 
 MAX_FRAME_COUNT = 0
 SAVE_EVERY_N_VIDEOS = 10
@@ -35,12 +28,12 @@ def process_frame(frame):
 def normalize_landmarks(landmarks, frame_width, frame_height):
     landmarks[:, 0] /= frame_width
     landmarks[:, 1] /= frame_height
-    return landmarks.astype(FP_PRECSION)
+    return landmarks.astype(FP_PRECISION)
 
 
 def get_frame_landmarks(frame):
-    palm_landmarks = np.zeros((42, 3), dtype=FP_PRECSION)
-    body_landmarks = np.zeros((7, 3), dtype=FP_PRECSION)
+    palm_landmarks = np.zeros((42, 3), dtype=FP_PRECISION)
+    body_landmarks = np.zeros((7, 3), dtype=FP_PRECISION)
 
     results_hands = hands.process(frame)
     if results_hands.multi_hand_landmarks:
@@ -87,12 +80,9 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
             frame = process_frame(frame)
 
             palm_landmarks, body_landmarks = get_frame_landmarks(frame)
-            # palm_landmarks = normalize_landmarks(palm_landmarks, frame.shape[1], frame.shape[0])
-            # body_landmarks = normalize_landmarks(body_landmarks, frame.shape[1], frame.shape[0])
 
             all_palm_landmarks.append(palm_landmarks.tolist())
             all_body_landmarks.append(body_landmarks.tolist())
-			
 
     cap.release()
     return all_palm_landmarks, all_body_landmarks, frame_count
@@ -135,7 +125,6 @@ def save_checkpoint(processed_videos, max_frame_count):
 
 
 def padding(total_skeleton_data, MAX_FRAME_COUNT):
-    
     padded_total_skeleton_data = defaultdict(list)
 
     for gloss, videos in total_skeleton_data.items():
@@ -143,12 +132,11 @@ def padding(total_skeleton_data, MAX_FRAME_COUNT):
             padding = [[0,0,0]] * (MAX_FRAME_COUNT - len(video))
             padded_video = video + padding
             padded_total_skeleton_data[gloss].append(padded_video)
-    return padded_total_skeleton_data 
+    return padded_total_skeleton_data
 
 
 palm_skeleton_data, body_skeleton_data, processed_videos, MAX_FRAME_COUNT = load_existing_data()
 processed_count = 0
-
 
 for data in tqdm(data_processing.processed_data, ncols=100):
     video_path = data["video_path"]
@@ -160,7 +148,7 @@ for data in tqdm(data_processing.processed_data, ncols=100):
         continue
 
     try:
-        palm_landmarks, body_landmarks, frame_count  = get_video_landmarks(video_path, start_frame, end_frame)
+        palm_landmarks, body_landmarks, frame_count = get_video_landmarks(video_path, start_frame, end_frame)
         palm_landmarks = np.around(palm_landmarks, decimals=5).tolist()
         body_landmarks = np.around(body_landmarks, decimals=5).tolist()
 
@@ -176,16 +164,15 @@ for data in tqdm(data_processing.processed_data, ncols=100):
             save_grouped_jsonl_gz(PALM_JSONL_PATH, palm_skeleton_data)
             save_grouped_jsonl_gz(BODY_JSONL_PATH, body_skeleton_data)
             save_checkpoint(processed_videos, MAX_FRAME_COUNT)
-            print(f"Saved progress after {processed_count} videos.")
+            logging.info(f"Saved progress after {processed_count} videos.")
 
     except Exception as e:
-        print(f"\nError processing video {video_path}: {e}")
-            
+        logging.error(f"Error processing video {video_path}: {e}")
 
+
+os.makedirs(PALM_BODY_PATH, exist_ok=True)
 save_grouped_jsonl_gz(PALM_JSONL_PATH, palm_skeleton_data)
 save_grouped_jsonl_gz(BODY_JSONL_PATH, body_skeleton_data)
 save_checkpoint(processed_videos, MAX_FRAME_COUNT)
 
-print(f"Actual processed videos count (Before Augmentation)", processed_count)
-print(f"Total Processed videos count (After augmentation) ", len(palm_skeleton_data))
-print(f"Maximum frame count encountered: {MAX_FRAME_COUNT}")
+logging.info(f"Maximum frame count encountered: {MAX_FRAME_COUNT}")

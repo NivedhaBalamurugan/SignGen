@@ -1,6 +1,6 @@
 import numpy as np
+from config import FP_PRECISION
 
-FP_PRECISION = np.float32
 DECIMAL_PRECISION = 5
 PARAM_PRECISION = 2
 

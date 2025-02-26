@@ -1,10 +1,8 @@
 import os
 import gzip
 import orjson
-import logging
 from collections import defaultdict
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from config import logging
 
 def load_jsonl_gz(file_path, single_object=False):
     logging.info(f"Loading JSONL file: {file_path}")

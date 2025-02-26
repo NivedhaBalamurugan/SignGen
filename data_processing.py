@@ -1,22 +1,20 @@
 import json
 import os
 from tqdm import tqdm
+from config import *
 
-
-CHUNK_INDEX = 0
-
-with open('chunks.json', 'r') as f:
+with open(CHUNKS_JSON_PATH, 'r') as f:
     chunks = json.load(f)
 
 chunk_videos = set(chunks[str(CHUNK_INDEX)])
 
-with open('Dataset/WLASL_v0.3.json') as json_file:
+with open(WLASL_JSON_PATH) as json_file:
     all_data = json.load(json_file)
 
-with open('Dataset/missing.txt') as missing_file:
+with open(MISSING_TXT_PATH) as missing_file:
     missing_video_ids = missing_file.read().splitlines()
 
-video_dir = "Dataset/videos"
+video_dir = VIDEOS_PATH
 
 processed_data = []
 total_videos = 0

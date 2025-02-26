@@ -1,7 +1,6 @@
 __pycache__/
 Dataset/
 Models/
-landmarks/
 output_frames/
 
 [0-9]_body_landmarks.json

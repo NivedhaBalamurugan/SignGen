@@ -1,14 +1,11 @@
 import os
 import json
-import logging
 import numpy as np
 from collections import defaultdict
 from augmentation import (generate_params, shear_landmarks, 
                         translate_landmarks, scale_landmarks)
 from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+from config import *
 
 def save_chunk_statistics(stats, output_path):
     stats_path = output_path.replace('.jsonl.gz', '_stats.json')
@@ -35,7 +32,6 @@ def augment_and_save(input_path, output_path):
             total_videos += word_videos
             logging.info(f"Processing word '{word}' with {word_videos} videos")
             
-            # Track statistics for this word
             word_stats[word] = {
                 'original_videos': word_videos,
                 'augmented_videos': word_videos * 3,
@@ -99,11 +95,11 @@ def augment_and_save(input_path, output_path):
         logging.error(f"Error saving augmented landmarks: {e}")
 
 def main():
-    os.makedirs('./landmarks/augmented', exist_ok=True)
+    os.makedirs(AUGMENTED_PATH, exist_ok=True)
 
     for i in range(10):
-        input_path = f'./landmarks/{i}_landmarks.jsonl.gz'
-        output_path = f'./landmarks/augmented/{i}_aug_landmarks.jsonl.gz'
+        input_path = MERGED_JSONL_PATH.replace(f"{CHUNK_INDEX}", f"{i}")
+        output_path = AUGMENTED_JSONL_PATH.replace(f"{CHUNK_INDEX}", f"{i}")
         augment_and_save(input_path, output_path)
 
 if __name__ == "__main__":
