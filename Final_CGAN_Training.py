@@ -178,5 +178,5 @@ for epoch in range(EPOCHS):
     print(f"Epoch {epoch+1}/{EPOCHS} - Gen Loss: {gen_loss.numpy():.4f}, Disc Loss = {disc_loss.numpy():.4f}")
 
 
-generator.save("Dataset/Generator")
-discriminator.save("Dataset/Discriminator")
+generator.save("Dataset/Generator.keras")
+discriminator.save("Dataset/Discriminator.keras")
