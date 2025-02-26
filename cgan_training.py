@@ -1,8 +1,10 @@
 import tensorflow as tf
 import numpy as np
 import json
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import GRU, Dense, Input, RepeatVector, Reshape
+from keras.models import Sequential
+from keras.layers import GRU, Dense, Input, RepeatVector, Reshape
+
+FP_PRECISION = np.float32
 
 def load_word_embeddings(filepath):
     word_embeddings = {}
@@ -10,7 +12,7 @@ def load_word_embeddings(filepath):
         for line in file:
             values = line.split()
             word = values[0]
-            vector = np.asarray(values[1:], dtype='float32')
+            vector = np.asarray(values[1:], dtype=FP_PRECISION)
             word_embeddings[word] = vector
     return word_embeddings
 
@@ -126,16 +128,16 @@ all_skeleton_sequences = all_skeleton_sequences[:trimmed_size]
 print(f"Final num_batches: {num_batches}")
 
 def train_step(word_vector, real_skeleton):
-    noise = tf.random.normal([BATCH_SIZE, NOISE_DIM], dtype=tf.float32)  
-    word_vector = tf.cast(word_vector, tf.float32)
+    noise = tf.random.normal([BATCH_SIZE, NOISE_DIM], dtype=FP_PRECISION)  
+    word_vector = tf.cast(word_vector, FP_PRECISION)
     generator_input = tf.concat([word_vector, noise], axis=1)
 
     with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
         generated_skeleton = generator(generator_input, training=True)
 
 
-        real_skeleton = tf.cast(real_skeleton, tf.float32)
-        generated_skeleton = tf.cast(generated_skeleton, tf.float32)
+        real_skeleton = tf.cast(real_skeleton, FP_PRECISION)
+        generated_skeleton = tf.cast(generated_skeleton, FP_PRECISION)
 
 
         word_vector_expanded = tf.reshape(word_vector, (BATCH_SIZE, 1, 1, 50))  
