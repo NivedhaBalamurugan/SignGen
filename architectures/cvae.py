@@ -26,7 +26,8 @@ class Encoder(nn.Module):
         self.dropout = nn.Dropout(p=dropout_prob)
 
     def forward(self, x):
-        B, T, _ = x.size()
+        B, T, _, _ = x.size()  
+        x = x.view(B, T, -1)  
 
         mask = (x.sum(dim=2) != 0).float()
         outputs, (h_n, _) = self.lstm(x)

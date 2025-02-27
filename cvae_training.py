@@ -2,15 +2,23 @@ import os
 import glob
 import orjson
 import numpy as np
+import torch
+import logging
+import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch import optim
 from architectures.cvae import ConditionalVAE, kl_divergence_loss, latent_classification_loss
 from torch.optim.lr_scheduler import ReduceLROnPlateau 
 from torch.optim import AdamW
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from utils.glove_utils import validate_word_embeddings
 from utils.validation_utils import validate_data_shapes, validate_config
 from config import *
+import warnings
+
+warnings.filterwarnings("ignore")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 class LandmarkDataset(Dataset):
     def __init__(self, file_paths, transform=None):
@@ -56,7 +64,6 @@ class LandmarkDataset(Dataset):
         
         pad_frames = np.zeros((MAX_FRAMES - num_existing_frames, 49, 3), dtype=np.float32)
         padded_video = np.vstack((video, pad_frames))
-        
         return padded_video
 
     def __len__(self):
@@ -77,12 +84,10 @@ class LandmarkDataset(Dataset):
 
 def train(model, train_loader, val_loader, device, num_epochs, lr):
     
-    if not validate_data_shapes(word_vectors, skeleton_sequences):
-        return False
     logging.info("Starting training...")
     model.train()
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
     scaler = GradScaler()
     best_val_loss = float('inf')
     patience = 10
@@ -96,7 +101,12 @@ def train(model, train_loader, val_loader, device, num_epochs, lr):
             video = batch['video'].to(device)
             condition = batch['condition'].to(device)
 
-            with autocast():
+            if torch.cuda.is_available():
+                with autocast():
+                    recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
+                    z_g = torch.normal(0, 1, size=z_v.shape).to(device)
+                    loss = kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
+            else:
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
                 loss = kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
@@ -148,7 +158,7 @@ def main():
     if not validate_config():
         return
 
-    os.makedirs(os.path.dirname(CVAE_MODEL_PATH), exist_ok=True)
+    os.makedirs(CVAE_MODEL_PATH, exist_ok=True)
 
     logging.info("Initializing dataset...")
     dataset = LandmarkDataset(FINAL_JSONL_PATHS)
@@ -166,8 +176,6 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=CVAE_BATCH_SIZE, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_dataset, batch_size=CVAE_BATCH_SIZE, shuffle=False, num_workers=0)
 
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = ConditionalVAE(
         input_dim=CVAE_INPUT_DIM,
         hidden_dim=CVAE_HIDDEN_DIM,
