@@ -79,7 +79,7 @@ def images_to_video_ffmpeg(image_folder, output_video, fps=30):
     os.system(f"ffmpeg -framerate {fps} -i {image_folder}/frame_%d.png -c:v libx264 -pix_fmt yuv420p {output_video}")
 
 
-def save_generated_sequence(generated_sequence):
+def save_generated_sequence(generated_sequence, model_name):
 
     output_dir = CVAE_OUTPUT_FRAMES
     os.makedirs(output_dir, exist_ok=True)
@@ -90,6 +90,20 @@ def save_generated_sequence(generated_sequence):
     
     logging.info(f"Saved {len(generated_sequence)} frames in '{output_dir}'")
 
-    images_to_video_ffmpeg(CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO, fps=30)
-
-    logging.info(f"Video saved to {CVAE_OUTPUT_VIDEO}")
+    if model_name == "CVAE":
+        images_to_video_ffmpeg(CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO, fps=30)
+        logging.info(f"Video saved to {CVAE_OUTPUT_VIDEO}")
+    elif model_name == "CGAN":
+        images_to_video_ffmpeg(CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO, fps=30)
+        logging.info(f"Video saved to {CGAN_OUTPUT_VIDEO}")
+    elif model_name == "CVAE_STGCN":
+        images_to_video_ffmpeg(CVAE_STGCN_OUTPUT_FRAMES, CVAE__STGCN_OUTPUT_VIDEO, fps=30)
+        logging.info(f"Video saved to {CVAE__STGCN_OUTPUT_VIDEO}")
+    elif model_name == "CGAN_STGCN":
+        images_to_video_ffmpeg(CGAN_STGCN_OUTPUT_FRAMES, CGAN__STGCN_OUTPUT_VIDEO, fps=30)
+        logging.info(f"Video saved to {CGAN__STGCN_OUTPUT_VIDEO}")
+    elif model_name == "MHA":
+        images_to_video_ffmpeg(MHA_OUTPUT_FRAMES, MHA_OUTPUT_VIDEO, fps=30)
+        logging.info(f"Video saved to {MHA_OUTPUT_VIDEO}")
+    else:
+        logging.error("Invalid model name provided.")

@@ -4,6 +4,11 @@ import os
 from cvae import ConditionalVAE  
 import show_output
 from config import *
+import warnings
+
+warnings.filterwarnings("ignore")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def generate_sequence(asl_word, model):
    
@@ -22,7 +27,6 @@ def generate_sequence(asl_word, model):
 
 def get_cvae_sequence(asl_word, isSave_Video):
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = ConditionalVAE(
         input_dim=CVAE_INPUT_DIM,
         hidden_dim=CVAE_HIDDEN_DIM,
@@ -33,7 +37,8 @@ def get_cvae_sequence(asl_word, isSave_Video):
     ).to(device)
 
 
-    if not os.path.exists(CVAE_MODEL_PATH):
+    model_path = os.path.join(CVAE_MODEL_PATH, "cvae.pth")
+    if not os.path.exists(model_path):
         logging.error("Trained model file  not found.")
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
@@ -46,5 +51,5 @@ def get_cvae_sequence(asl_word, isSave_Video):
 
     logging.info(f"Generated sequence shape: {generated_skeleton.shape}")
     if isSave_Video:
-        show_output.save_generated_sequence(generated_skeleton) 
+        show_output.save_generated_sequence(generated_skeleton, "CVAE") 
     return generated_skeleton
