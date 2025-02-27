@@ -154,7 +154,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                             try:
                                 checkpoint_path = os.path.join(
                                     os.path.dirname(CGAN_GEN_PATH), 
-                                    f"checkpoint_e{epoch}_c{chunk_idx}_b{i}.keras"
+                                    f"cgan_train_checkpoint_e{epoch}.keras"
                                 )
                                 generator.save(checkpoint_path)
                                 logging.info(f"Saved checkpoint: {checkpoint_path}")

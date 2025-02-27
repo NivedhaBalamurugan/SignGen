@@ -6,8 +6,9 @@ from config import *
 def save_model_and_history(model_path, model, history=None):
     try:
         model.save(model_path)
+        model_name = model_path.split('/')[-1].split('.')[0].split('_')[0] 
         if history is not None:
-            history_path = os.path.join(os.path.dirname(model_path), 'training_history.npy')
+            history_path = os.path.join(os.path.dirname(model_path), f'{model_name}_training_history.npy')
             np.save(history_path, history)
             logging.info(f"Model saved to {model_path}")
             logging.info(f"Training history saved to {history_path}")
