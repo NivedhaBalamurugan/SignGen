@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+from config import *
 
 def plot_a_frame(J, filename):
     J = np.array(J)
@@ -78,15 +79,17 @@ def images_to_video_ffmpeg(image_folder, output_video, fps=30):
     os.system(f"ffmpeg -framerate {fps} -i {image_folder}/frame_%d.png -c:v libx264 -pix_fmt yuv420p {output_video}")
 
 
-def save_generated_sequence(generated_sequence, output_dir):
+def save_generated_sequence(generated_sequence):
+
+    output_dir = CVAE_OUTPUT_FRAMES
     os.makedirs(output_dir, exist_ok=True)
     
     for i, frame in enumerate(generated_sequence):
         filename = os.path.join(output_dir, f"frame_{i}.png")
         plot_a_frame(frame, filename)
     
-    print(f"Saved {len(generated_sequence)} frames in '{output_dir}'")
+    logging.info(f"Saved {len(generated_sequence)} frames in '{output_dir}'")
 
-    images_to_video_ffmpeg("Dataset/output_sequence", "Dataset/final_video.mp4", fps=30)
+    images_to_video_ffmpeg(CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO, fps=30)
 
-    print(f"Video saved to 'output_video.mp4'")
+    logging.info(f"Video saved to {CVAE_OUTPUT_VIDEO}")

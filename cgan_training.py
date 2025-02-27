@@ -9,7 +9,7 @@ from config import *
 from utils.data_utils import load_skeleton_sequences, prepare_training_data
 from utils.validation_utils import validate_data_shapes, validate_config
 from utils.model_utils import save_model_and_history, log_model_summary, log_training_config
-from utils.glove_utils import load_word_embeddings, validate_word_embeddings
+from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import build_generator, build_discriminator, discriminator_loss
 
 FILES_PER_BATCH = 2
@@ -195,7 +195,7 @@ def main():
     os.makedirs(os.path.dirname(CGAN_GEN_PATH), exist_ok=True)
     os.makedirs(os.path.dirname(CGAN_DIS_PATH), exist_ok=True)
 
-    word_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
+    word_embeddings = WORD_EMBEDDINGS
     if not word_embeddings or not validate_word_embeddings(word_embeddings, CGAN_NOISE_DIM):
         return
 
