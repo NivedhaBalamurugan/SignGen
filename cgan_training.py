@@ -56,17 +56,6 @@ def process_data_batches(jsonl_files, word_embeddings):
             
     return total_sequences, total_vectors
 
-def validate_data_shapes(word_vectors, skeleton_sequences):
-    if word_vectors.shape[0] != skeleton_sequences.shape[0]:
-        logging.error(f"Mismatch in samples: words={word_vectors.shape[0]}, skeletons={skeleton_sequences.shape[0]}")
-        return False
-    
-    if skeleton_sequences.shape[1:] != (MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES):
-        logging.error(f"Invalid skeleton shape: {skeleton_sequences.shape[1:]}, expected: ({MAX_FRAMES}, {NUM_JOINTS}, {NUM_COORDINATES})")
-        return False
-    
-    return True
-
 def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs=100, batch_size=32):
 
     if not validate_data_shapes(word_vectors, skeleton_sequences):
