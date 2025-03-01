@@ -2,9 +2,9 @@ import os
 import json
 import numpy as np
 from collections import defaultdict
-from augmentation import (generate_params, shear_landmarks, 
+from augmentation import (generate_params, generate_shear_params, shear_landmarks, 
                         translate_landmarks, scale_landmarks, 
-                        denormalize_landmarks, normalize_landmarks, augment_skeleton_sequence)
+                        denormalize_landmarks, normalize_landmarks)
 from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
 from config import *
 
@@ -35,18 +35,20 @@ def augment_and_save(input_path, output_path):
             
             word_stats[word] = {
                 'original_videos': word_videos,
-                'augmented_videos': word_videos * 3,
-                'total_videos': word_videos * 4
+                'augmented_videos': word_videos * 7,
+                'total_videos': word_videos * 8
             }
 
             for video_idx, video in enumerate(videos, 1):
                 augmented_data[word].append(video)
                 
-                shearing_video = []
-                translation_video = []
-                scaling_video = []
+                shearing_video, translation_video, scaling_video = [], [], []
+                shearing_video_2, translation_video_2, scaling_video_2 = [], [], []
+                shearing_video_3 = []
                 
                 shear_params, trans_params, scale_params = generate_params()
+                shear_params_2, trans_params_2, scale_params_2 = generate_params()
+                shear_params_3 = generate_shear_params()
                 
                 for frame in video:
                     frame = np.array(frame, dtype=np.float32)
@@ -55,19 +57,35 @@ def augment_and_save(input_path, output_path):
                     sheared_frame = shear_landmarks(frame, shear_params)
                     translated_frame = translate_landmarks(frame, trans_params)
                     scaled_frame = scale_landmarks(frame, scale_params)
+                    sheared_frame_2 = shear_landmarks(frame, shear_params_2)
+                    translated_frame_2 = translate_landmarks(frame, trans_params_2)
+                    scaled_frame_2 = scale_landmarks(frame, scale_params_2)
+                    sheared_frame_3 = shear_landmarks(frame, shear_params_3)
                     
                     sheared_frame = normalize_landmarks(sheared_frame)
                     translated_frame = normalize_landmarks(translated_frame)
                     scaled_frame = normalize_landmarks(scaled_frame)
+                    sheared_frame_2 = normalize_landmarks(sheared_frame_2)
+                    translated_frame_2 = normalize_landmarks(translated_frame_2)
+                    scaled_frame_2 = normalize_landmarks(scaled_frame_2)
+                    sheared_frame_3 = normalize_landmarks(sheared_frame_3)
                     
                     shearing_video.append(sheared_frame.tolist())
                     translation_video.append(translated_frame.tolist())
                     scaling_video.append(scaled_frame.tolist())
+                    shearing_video_2.append(sheared_frame_2.tolist())
+                    translation_video_2.append(translated_frame_2.tolist())
+                    scaling_video_2.append(scaled_frame_2.tolist())
+                    shearing_video_3.append(sheared_frame_3.tolist())
                 
                 augmented_data[word].append(shearing_video)
                 augmented_data[word].append(translation_video)
                 augmented_data[word].append(scaling_video)
-                total_augmented += 3
+                augmented_data[word].append(shearing_video_2)
+                augmented_data[word].append(shearing_video_3)
+                augmented_data[word].append(translation_video_2)
+                augmented_data[word].append(scaling_video_2)
+                total_augmented += 7
                 
                 logging.info(f"Processed video {video_idx}/{word_videos} for word '{word}'")
 
