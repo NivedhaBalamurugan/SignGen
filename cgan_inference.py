@@ -3,7 +3,7 @@ import json
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
-
+import show_output
 
 def load_word_embeddings(filepath):
     word_embeddings = {}
@@ -56,15 +56,17 @@ def visualize_skeleton(sequence):
 
     plt.show()
 
+def get_cgan_sequence(word, isSave_Video):
 
-word = "hello"  # needs to be changed based on user's input later
-generated_sequence = generate_skeleton_sequence(word)
-if generated_sequence is not None:
-    print(f"Generated Skeleton Shape for '{word}': {generated_sequence.shape}")
-    save_path = "Dataset"
-    os.makedirs(save_path, exist_ok=True)
-    json_filepath = os.path.join(save_path, f"generated_skeleton_{word}.json")
-    with open(json_filepath, 'w') as json_file:
-        json.dump(generated_sequence.tolist(), json_file)
-        print("Saved successfully")
-    visualize_skeleton(generated_sequence)
+    generated_sequence = generate_skeleton_sequence(word)
+    if generated_sequence is not None:
+        print(f"Generated Skeleton Shape for '{word}': {generated_sequence.shape}")
+        save_path = "Dataset"
+        os.makedirs(save_path, exist_ok=True)
+        json_filepath = os.path.join(save_path, f"generated_skeleton_{word}.json")
+        with open(json_filepath, 'w') as json_file:
+            json.dump(generated_sequence.tolist(), json_file)
+            print("Saved successfully")
+        if isSave_Video:
+            show_output.save_generated_sequence(generated_sequence, "CVAE") 
+    return generated_sequence

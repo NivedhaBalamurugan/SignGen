@@ -1,147 +1,91 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
+import torch.optim as optim
+from torch_geometric.nn import GCNConv
+from torch.optim.lr_scheduler import StepLR
 import numpy as np
-import glob
-import os
-import orjson
-import warnings
 from config import *
-from architectures.stgcn import LearnableAdjacency, STGCN
+from utils.data_utils import load_skeleton_sequences
+import cvae_inference, cgan_inference
+from architectures.stgcn import STGCN, create_edge_index, group_joints
 
-warnings.filterwarnings("ignore")
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-class SignLanguageDataset(Dataset):
-    def __init__(self, file_path, transform=None):
-        logging.info(f"Loading dataset from {file_path}...")
-        self.transform = transform
-        self.data = []
-        self._load_process_data(file_path)
-        logging.info(f"Loaded {len(self.data)} gloss entries.")
-        logging.info(f"Dataset processing complete. Max sequence length: {MAX_FRAMES}")
+def temporal_consistency_loss(input_sequence, refined_sequence):
+    return F.mse_loss(input_sequence, refined_sequence)
 
-    def _load_process_data(self, file_paths):        
-        
-        file_paths = glob.glob(file_paths)
-        for file_path in file_paths:
-            with open(file_path, "rb") as f:
-                for line in f:
-                    try:
-                        item = orjson.loads(line)
-                        for gloss, videos in item.items():
-                            for video in videos:
-                                padded_video = self._pad_video(video)
-                                
-                                try:
-                                    padded_video = np.array(padded_video, dtype=np.float32)
-                                except Exception as e:
-                                    logging.error(f"Error converting video to numpy array for gloss '{gloss}'. Possible shape mismatch.")
-                                    raise e
-                                
-                                self.data.append(torch.tensor(padded_video, dtype=torch.float32))
-                    except Exception as e:
-                        logging.error(f"Error processing {file_path}: {e}")
+def prepare_data():
+    inputs = []
+    outputs = []
+    skeleton_data = load_skeleton_sequences([FINAL_JSONL_PATHS])
     
-    def _pad_video(self, video):
-        
-        num_existing_frames = len(video)
-        if num_existing_frames >= MAX_FRAMES:
-            return video[:MAX_FRAMES]  
-        
-        pad_frames = np.zeros((MAX_FRAMES - num_existing_frames, 49, 3), dtype=np.float32)
-        padded_video = np.vstack((video, pad_frames))
-        return padded_video
+    for gloss, videos in skeleton_data.items():
+        num_videos = len(videos)
+    
+        for _ in range(num_videos):
+            generated_cvae = cvae_inference.get_cvae_sequence(gloss, 0)
+            generated_cgan = cgan_inference.get_cgan_sequence(gloss, 0)
+            outputs.append(group_joints(generated_cvae))  # Group generated sequences
+            outputs.append(group_joints(generated_cgan))  # Group generated sequences
+    
+        inputs.extend([group_joints(video) for video in videos])  # Group input sequences
+        inputs.extend([group_joints(video) for video in videos])  # Group input sequences
+    
+    inputs = torch.tensor(np.array(inputs), dtype=torch.float32)
+    outputs = torch.tensor(np.array(outputs), dtype=torch.float32)
+    return inputs, outputs
 
-    def __len__(self):
-        return len(self.data)
+def train_stgcn(model, inputs, outputs, edge_index, num_epochs=100, lr=0.001):
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
+    best_loss = float('inf')
+    patience = 10
+    counter = 0
 
-    def __getitem__(self, idx):
-        return self.data[idx].reshape(3, MAX_FRAMES, 49)
-
-
-def train_model(model, train_loader, val_loader, optimizer, criterion, scheduler, num_epochs=100, patience=10):
-    logging.info("Starting Training...")
-    model.train()
-    best_val_loss = float("inf")
-    early_stop_counter = 0
-
+    print("Starting training...")
     for epoch in range(num_epochs):
-        logging.info(f"Epoch {epoch+1}/{num_epochs}...")
-        epoch_loss = 0.0
+        model.train()
+        optimizer.zero_grad()
+        predictions = model(inputs, edge_index)
+        recon_loss = F.mse_loss(predictions, outputs)
+        temporal_loss = temporal_consistency_loss(inputs, predictions)
+        total_loss = recon_loss + temporal_loss
+        total_loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        optimizer.step()
+        scheduler.step()
 
-        for i, batch in enumerate(train_loader):
-            batch = batch.to(device)
-            optimizer.zero_grad()
-            refined_output = model(batch)
-            loss = criterion(refined_output, batch)
-            loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item()
-
-            if i % 10 == 0:  
-                logging.info(f"  Batch {i}/{len(train_loader)} | Loss: {loss.item():.4f}")
-
-        avg_train_loss = epoch_loss / len(train_loader)
-        logging.info(f"Epoch {epoch+1} completed. Avg Train Loss: {avg_train_loss:.4f}")
-
-        val_loss = 0.0
-        model.eval()
-        with torch.no_grad():
-            for batch in val_loader:
-                batch = batch.to(device)
-                output = model(batch)
-                loss = criterion(output, batch)
-                val_loss += loss.item()
-
-        avg_val_loss = val_loss / len(val_loader)
-        logging.info(f"Validation Loss: {avg_val_loss:.4f}")
-
-        current_lr = scheduler.optimizer.param_groups[0]['lr']
-        logging.info(f"Learning Rate: {current_lr}")
-
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
+        if total_loss.item() < best_loss:
+            best_loss = total_loss.item()
+            counter = 0
             model_save_path = os.path.join(STGCN_MODEL_PATH, "stgcn.pth")
             torch.save(model.state_dict(), model_save_path)
-            early_stop_counter = 0
+            print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {total_loss.item():.4f} (Best model saved)")
         else:
-            early_stop_counter += 1
-            if early_stop_counter >= patience:
-                logging.info(f"Early stopping triggered at epoch {epoch+1}.")
+            counter += 1
+            if counter >= patience:
+                print(f"Early stopping at epoch {epoch+1}!")
                 break
 
-        scheduler.step()
-        model.train()
+        if (epoch + 1) % 10 == 0:
+            print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {total_loss.item():.4f}")
 
-    logging.info("Training Complete!")
-
+    print("Training completed. Best model saved.")
 
 def main():
+    print("Preparing data...")
+    inputs, outputs = prepare_data()
+    edge_index = create_edge_index()
+    print("Data preparation complete.")
 
-    logging.info(f"Using device: {device}")
-    os.makedirs(STGCN_MODEL_PATH, exist_ok=True)
+    print("Initializing ST-GCN model...")
+    model = STGCN(num_nodes=16, num_features=3, num_classes=3)
+    print("Model initialized.")
 
-    dataset = SignLanguageDataset(FINAL_JSONL_PATHS)
-    train_size = int(0.8 * len(dataset))
-    val_size = int(0.1 * len(dataset))
-    test_size = len(dataset) - train_size - val_size
-    
-    train_set, val_set, test_set = torch.utils.data.random_split(dataset, [train_size, val_size, test_size])
-    train_loader = DataLoader(train_set, batch_size=8, shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=8, shuffle=False)
-    
-    logging.info(f"Dataset split: {len(train_set)} training, {len(val_set)} validation, {len(test_set)} test samples.")
-    
-    model = STGCN().to(device)
-    criterion = nn.MSELoss()
-    optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
-
-    train_model(model, train_loader, val_loader, optimizer, criterion, scheduler)
+    print("Starting model training...")
+    train_stgcn(model, inputs, outputs, edge_index)
+    print("Model training complete.")
 
 if __name__ == "__main__":
     main()
