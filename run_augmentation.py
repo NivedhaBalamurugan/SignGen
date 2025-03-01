@@ -3,9 +3,9 @@ import json
 import numpy as np
 from collections import defaultdict
 from augmentation import (generate_params, generate_shear_params, shear_landmarks, 
-                        translate_landmarks, scale_landmarks, 
-                        denormalize_landmarks, normalize_landmarks)
+                        translate_landmarks, scale_landmarks)
 from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
+from utils.data_utils import (denormalize_landmarks, normalize_landmarks)
 from config import *
 
 def save_chunk_statistics(stats, output_path):
@@ -82,9 +82,9 @@ def augment_and_save(input_path, output_path):
                 augmented_data[word].append(translation_video)
                 augmented_data[word].append(scaling_video)
                 augmented_data[word].append(shearing_video_2)
-                augmented_data[word].append(shearing_video_3)
                 augmented_data[word].append(translation_video_2)
                 augmented_data[word].append(scaling_video_2)
+                augmented_data[word].append(shearing_video_3)
                 total_augmented += 7
                 
                 logging.info(f"Processed video {video_idx}/{word_videos} for word '{word}'")
