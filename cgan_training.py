@@ -1,22 +1,22 @@
 import os
 import glob
 import gc
-from tqdm import tqdm
+import logging
 import psutil
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.callbacks import EarlyStopping
 from config import *
 from utils.data_utils import load_skeleton_sequences, prepare_training_data
 from utils.validation_utils import validate_data_shapes, validate_config
 from utils.model_utils import save_model_and_history, log_model_summary, log_training_config
 from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import build_generator, build_discriminator, discriminator_loss
-from tensorflow.keras.callbacks import EarlyStopping
+from scipy.stats import entropy
 
 FILES_PER_BATCH = 2
 MAX_SAMPLES_PER_BATCH = 1000
 MEMORY_THRESHOLD = 85
-
 
 def check_memory():
     memory_percent = psutil.Process().memory_percent()
@@ -26,7 +26,6 @@ def check_memory():
         gc.collect()
         return True
     return False
-
 
 def process_file_batch(files, word_embeddings):
     logging.info(f"Processing files: {[os.path.basename(f) for f in files]}")
@@ -40,7 +39,6 @@ def process_file_batch(files, word_embeddings):
     gc.collect()
 
     return sequences, vectors
-
 
 def process_data_batches(jsonl_files, word_embeddings):
     total_sequences = []
@@ -62,6 +60,26 @@ def process_data_batches(jsonl_files, word_embeddings):
 
     return total_sequences, total_vectors
 
+def calculate_pkd(real_skeletons, generated_skeletons):
+    distances = np.linalg.norm(real_skeletons - generated_skeletons, axis=-1)
+    avg_distance = np.mean(distances)
+    return avg_distance
+
+def calculate_kld(real_data, generated_data):
+    real_hist, _ = np.histogram(real_data, bins=30, density=True)
+    generated_hist, _ = np.histogram(generated_data, bins=30, density=True)
+    
+    kld = entropy(real_hist + 1e-8, generated_hist + 1e-8)
+    return kld
+
+def calculate_diversity_score(generated_samples):
+    pairwise_distances = []
+    for i in range(len(generated_samples)):
+        for j in range(i + 1, len(generated_samples)):
+            dist = np.linalg.norm(generated_samples[i] - generated_samples[j])
+            pairwise_distances.append(dist)
+    diversity_score = np.mean(pairwise_distances)
+    return diversity_score
 
 def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs=100, batch_size=32, patience=10):
 
@@ -89,8 +107,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
 
     @tf.function
     def train_step(word_vector, real_skeleton):
-        noise = tf.random.normal(
-            [batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
+        noise = tf.random.normal([batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
         word_vector = tf.cast(word_vector, FP_PRECISION)
         generator_input = tf.concat([word_vector, noise], axis=1)
 
@@ -100,15 +117,11 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             real_skeleton = tf.cast(real_skeleton, FP_PRECISION)
             generated_skeleton = tf.cast(generated_skeleton, FP_PRECISION)
 
-            word_vector_expanded = tf.reshape(
-                word_vector, (batch_size, 1, 1, 50))
-            word_vector_expanded = tf.tile(
-                word_vector_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])
+            word_vector_expanded = tf.reshape(word_vector, (batch_size, 1, 1, 50))
+            word_vector_expanded = tf.tile(word_vector_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])
 
-            real_input = tf.concat(
-                [real_skeleton, word_vector_expanded], axis=-1)
-            fake_input = tf.concat(
-                [generated_skeleton, word_vector_expanded], axis=-1)
+            real_input = tf.concat([real_skeleton, word_vector_expanded], axis=-1)
+            fake_input = tf.concat([generated_skeleton, word_vector_expanded], axis=-1)
 
             real_output = discriminator(real_input, training=True)
             fake_output = discriminator(fake_input, training=True)
@@ -116,15 +129,11 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             gen_loss = cross_entropy(tf.ones_like(fake_output), fake_output)
             disc_loss = discriminator_loss(real_output, fake_output)
 
-        generator_gradients = gen_tape.gradient(
-            gen_loss, generator.trainable_variables)
-        discriminator_gradients = disc_tape.gradient(
-            disc_loss, discriminator.trainable_variables)
+        generator_gradients = gen_tape.gradient(gen_loss, generator.trainable_variables)
+        discriminator_gradients = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
 
-        generator_optimizer.apply_gradients(
-            zip(generator_gradients, generator.trainable_variables))
-        discriminator_optimizer.apply_gradients(
-            zip(discriminator_gradients, discriminator.trainable_variables))
+        generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
+        discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
 
         return gen_loss, disc_loss
 
@@ -150,13 +159,11 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                         logging.info("Cleared memory during training")
 
                     try:
-                        batch_indices = np.random.choice(
-                            chunk_size, batch_size, replace=False)
+                        batch_indices = np.random.choice(chunk_size, batch_size, replace=False)
                         word_batch = word_vectors_chunk[batch_indices]
                         skeleton_batch = skeleton_sequences_chunk[batch_indices]
 
-                        gen_loss, disc_loss = train_step(
-                            word_batch, skeleton_batch)
+                        gen_loss, disc_loss = train_step(word_batch, skeleton_batch)
 
                         epoch_gen_loss.update_state(gen_loss)
                         epoch_disc_loss.update_state(disc_loss)
@@ -248,12 +255,24 @@ def main():
         if success:
             save_model_and_history(CGAN_GEN_PATH, generator, history)
             save_model_and_history(CGAN_DIS_PATH, discriminator)
+
+            
+            generated_skeletons = generator(all_word_vectors)
+            real_skeletons = all_skeleton_sequences
+
+            pkd_score = calculate_pkd(real_skeletons, generated_skeletons)
+            kld_score = calculate_kld(real_skeletons.flatten(), generated_skeletons.flatten())
+            diversity_score = calculate_diversity_score(generated_skeletons)
+
+            logging.info(f"Per-Keypoint Distance (PKD): {pkd_score:.4f}")
+            logging.info(f"KL Divergence (KLD): {kld_score:.4f}")
+            logging.info(f"Diversity Score: {diversity_score:.4f}")
+
         else:
             logging.error("Training failed, models not saved")
     except Exception as e:
         logging.error(f"Training error: {e}")
         return
-
 
 if __name__ == "__main__":
     main()
