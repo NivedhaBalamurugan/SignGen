@@ -5,7 +5,7 @@ import logging
 import psutil
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.callbacks import EarlyStopping
+from tqdm import tqdm
 from config import *
 from utils.data_utils import load_skeleton_sequences, prepare_training_data
 from utils.validation_utils import validate_data_shapes, validate_config
@@ -14,7 +14,7 @@ from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import build_generator, build_discriminator, discriminator_loss
 from scipy.stats import entropy
 
-FILES_PER_BATCH = 2
+FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000
 MEMORY_THRESHOLD = 85
 
@@ -102,7 +102,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
 
     logging.info(f"Training with {num_batches} batches per epoch")
 
-    early_stopping = EarlyStopping(
+    early_stopping = tf.keras.callbacks.EarlyStopping(
         monitor='loss', patience=patience, restore_best_weights=True, verbose=1)
 
     @tf.function

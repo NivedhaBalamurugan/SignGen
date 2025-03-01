@@ -52,10 +52,10 @@ def get_paths(chunk_index=0):
         'merged_jsonl': os.path.join(MERGED_PATH, f"{chunk_index}_landmarks.jsonl.gz"),
         'augmented_jsonl': os.path.join(AUGMENTED_PATH, f"{chunk_index}_aug_landmarks.jsonl.gz"),
         'final_jsonl': os.path.join(FINAL_PATH, f"{chunk_index}_final_landmarks.jsonl.gz"),
-        'ext_body': f"{chunk_index}_str_body_landmarks.jsonl.gz",
-        'ext_palm': f"{chunk_index}_str_palm_landmarks.jsonl.gz",
-        'ext_merged': f"{chunk_index}_str_landmarks.jsonl.gz",
-        'ext_augmented': f"{chunk_index}_str_aug_landmarks.jsonl.gz"
+        'ext_body': f"{chunk_index}_str_body_landmarks.jsonl",
+        'ext_palm': f"{chunk_index}_str_palm_landmarks.jsonl",
+        'ext_merged': f"{chunk_index}_str_landmarks.jsonl",
+        'ext_augmented': f"{chunk_index}_str_aug_landmarks.jsonl"
     }
 
 # Final landmarks paths
