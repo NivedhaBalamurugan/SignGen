@@ -4,14 +4,9 @@ import os
 from config import *
 
 def plot_a_frame(J, filename):
-    J = np.array(J)
-
-    J1 = J[:7]
-    J2 = J[7:]
-
-    print("J shape:", J.shape)
-    print("J1 shape:", J1.shape)
-    print("J2 shape:", J2.shape)
+    J = np.array(J).reshape(49, 3)  # Reshape into (49, 3)
+    J1 = J[:7, :]  # First 7 rows → (7, 3)
+    J2 = J[7:, :]  # Remaining 42 rows → (42, 3)
 
     hand_connections = [(0, 1), (1, 2), (2, 3), (3, 4),
                         (0, 5), (5, 6), (6, 7), (7, 8),
@@ -79,31 +74,17 @@ def images_to_video_ffmpeg(image_folder, output_video, fps=30):
     os.system(f"ffmpeg -framerate {fps} -i {image_folder}/frame_%d.png -c:v libx264 -pix_fmt yuv420p {output_video}")
 
 
-def save_generated_sequence(generated_sequence, model_name):
+def save_generated_sequence(generated_sequence, frame_path, video_path):
 
-    output_dir = CVAE_OUTPUT_FRAMES
-    os.makedirs(output_dir, exist_ok=True)
-    
+    output_dir = frame_path
+    os.makedirs(frame_path, exist_ok=True)
+
     for i, frame in enumerate(generated_sequence):
         filename = os.path.join(output_dir, f"frame_{i}.png")
         plot_a_frame(frame, filename)
     
     logging.info(f"Saved {len(generated_sequence)} frames in '{output_dir}'")
 
-    if model_name == "CVAE":
-        images_to_video_ffmpeg(CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO, fps=30)
-        logging.info(f"Video saved to {CVAE_OUTPUT_VIDEO}")
-    elif model_name == "CGAN":
-        images_to_video_ffmpeg(CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO, fps=30)
-        logging.info(f"Video saved to {CGAN_OUTPUT_VIDEO}")
-    elif model_name == "CVAE_STGCN":
-        images_to_video_ffmpeg(CVAE_STGCN_OUTPUT_FRAMES, CVAE__STGCN_OUTPUT_VIDEO, fps=30)
-        logging.info(f"Video saved to {CVAE__STGCN_OUTPUT_VIDEO}")
-    elif model_name == "CGAN_STGCN":
-        images_to_video_ffmpeg(CGAN_STGCN_OUTPUT_FRAMES, CGAN__STGCN_OUTPUT_VIDEO, fps=30)
-        logging.info(f"Video saved to {CGAN__STGCN_OUTPUT_VIDEO}")
-    elif model_name == "MHA":
-        images_to_video_ffmpeg(MHA_OUTPUT_FRAMES, MHA_OUTPUT_VIDEO, fps=30)
-        logging.info(f"Video saved to {MHA_OUTPUT_VIDEO}")
-    else:
-        logging.error("Invalid model name provided.")
+    images_to_video_ffmpeg(frame_path, video_path, fps=30)
+    logging.info(f"Video saved to {video_path}")
+   

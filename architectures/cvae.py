@@ -15,7 +15,7 @@ class Attention(nn.Module):
         return context, attn_weights
 
 class Encoder(nn.Module):
-    def __init__(self, input_dim, hidden_dim, latent_dim, dropout_prob=0.2):
+    def __init__(self, input_dim, hidden_dim, latent_dim, dropout_prob=0.4):
         super(Encoder, self).__init__()
         self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True, bidirectional=True)
         self.attention = Attention(hidden_dim * 2)

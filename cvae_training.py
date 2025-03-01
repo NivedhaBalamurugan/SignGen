@@ -13,6 +13,7 @@ from torch.optim import AdamW
 from torch.amp import GradScaler, autocast
 from utils.glove_utils import validate_word_embeddings
 from utils.validation_utils import validate_data_shapes, validate_config
+from torchsummary import summary
 from config import *
 import warnings
 
@@ -82,15 +83,15 @@ class LandmarkDataset(Dataset):
         return sample
 
 
-def train(model, train_loader, val_loader, device, num_epochs, lr):
+def train(model, train_loader, val_loader, device, num_epochs, lr, beta=0.5):
     
     logging.info("Starting training...")
     model.train()
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-5)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
     scaler = GradScaler()
     best_val_loss = float('inf')
-    patience = 10
+    patience = 15
     patience_counter = 0
 
     for epoch in range(num_epochs):
@@ -105,11 +106,13 @@ def train(model, train_loader, val_loader, device, num_epochs, lr):
                 with autocast():
                     recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                     z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                    loss = kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
+                    # Include beta in the loss calculation
+                    loss = beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
             else:
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                loss = kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
+                # Include beta in the loss calculation
+                loss = beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
 
             scaler.scale(loss).backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -130,7 +133,8 @@ def train(model, train_loader, val_loader, device, num_epochs, lr):
                 condition = batch['condition'].to(device)
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                loss = kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
+                # Include beta in the validation loss calculation
+                loss = beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_loader.dataset)
@@ -152,9 +156,64 @@ def train(model, train_loader, val_loader, device, num_epochs, lr):
                 logging.info("Early stopping triggered.")
                 break
 
+##eval metrics
+
+import torch
+import numpy as np
+from skimage.metrics import structural_similarity as ssim
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+
+def compute_mse(original, reconstructed):
+    return torch.mean((original - reconstructed) ** 2).item()
+
+def compute_mae(original, reconstructed):
+    return torch.mean(torch.abs(original - reconstructed)).item()
+
+def compute_psnr(mse, max_val=1.0):
+    return 10 * torch.log10(max_val ** 2 / mse).item()
+
+def compute_ssim(original, reconstructed):
+    original = original.cpu().numpy()
+    reconstructed = reconstructed.cpu().numpy()
+    ssim_val = 0
+    for i in range(original.shape[0]):  # Loop over batch
+        ssim_val += ssim(original[i], reconstructed[i], multichannel=True)
+    return ssim_val / original.shape[0]
+
+def evaluate_model(model, dataloader, device):
+
+    logging.info("Evaluating metris")
+    model.eval()
+    mse_values, ssim_values = [], []
+    latent_vectors = []
+    with torch.no_grad():
+        for batch in dataloader:
+            video = batch['video'].to(device)
+            condition = batch['condition'].to(device)
+            recon_video, mu, logvar, _, z = model(video, condition)
+            
+            # Compute metrics
+            mse = compute_mse(video, recon_video)
+            ssim_val = compute_ssim(video, recon_video)
+            mse_values.append(mse)
+            ssim_values.append(ssim_val)
+            
+            # Collect latent vectors
+            latent_vectors.append(z)
+    
+    # Aggregate results
+    avg_mse = np.mean(mse_values)
+    avg_ssim = np.mean(ssim_values)
+    latent_vectors = torch.cat(latent_vectors, dim=0)
+    
+    logging.info(f"Average MSE: {avg_mse:.4f}")
+    logging.info(f"Average SSIM: {avg_ssim:.4f}")
+    
+
+
 
 def main():
-
     if not validate_config():
         return
 
@@ -168,7 +227,7 @@ def main():
 
     logging.info("Initializing model...")
 
-    train_size = int(0.8 * len(dataset))  
+    train_size = int(0.9 * len(dataset))  
     val_size = len(dataset) - train_size  
 
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
@@ -186,10 +245,16 @@ def main():
     ).to(device)
 
     logging.info("Model initialized. Starting training...")
-    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.001)
+
+    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.0005, beta=0.5)
 
     logging.info("Model saved successfully ")
 
+    
+    input_shape = (MAX_FRAMES, CVAE_INPUT_DIM)
+    summary(model, input_size=input_shape)
+
+    evaluate_model(model, val_loader, device)
 
 if __name__ == "__main__":
     main()

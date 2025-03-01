@@ -3,15 +3,15 @@ import numpy as np
 import os
 import logging
 import warnings
-from architectures.cvae import ConditionalVAE  
-import show_output
+from architectures.cvae import ConditionalVAE
 from config import *
+import show_output
 
 warnings.filterwarnings("ignore")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def generate_sequence(asl_word, model):
 
+def generate_sequence(asl_word, model):
     model.eval()
     embedding_matrix = WORD_EMBEDDINGS
     cond_vector = embedding_matrix.get(asl_word, np.zeros(EMBEDDING_DIM))
@@ -25,7 +25,6 @@ def generate_sequence(asl_word, model):
     return generated_sequence.squeeze(0).cpu().numpy()
 
 def get_cvae_sequence(asl_word, isSave_Video=False):
-
     model_path = os.path.join(CVAE_MODEL_PATH, "cvae.pth")
     if not os.path.exists(model_path):
         logging.error("Trained model file not found.")
@@ -50,6 +49,7 @@ def get_cvae_sequence(asl_word, isSave_Video=False):
     logging.info(f"Generated sequence shape: {generated_skeleton.shape}")
     
     if isSave_Video:
-        show_output.save_generated_sequence(generated_skeleton, "CVAE") 
+        show_output.save_generated_sequence(generated_skeleton, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO) 
     
     return generated_skeleton
+

@@ -74,6 +74,9 @@ def train_stgcn(model, inputs, outputs, edge_index, num_epochs=100, lr=0.001):
     print("Training completed. Best model saved.")
 
 def main():
+
+    os.makedirs(STGCN_MODEL_PATH, exist_ok=True)
+
     print("Preparing data...")
     inputs, outputs = prepare_data()
     edge_index = create_edge_index()

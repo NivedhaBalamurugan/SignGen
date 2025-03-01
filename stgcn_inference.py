@@ -26,6 +26,9 @@ def get_refined_sequence(input_sequence, model_name, isSave_Video):
     print("Refined sequence shape:", refined_sequence.shape)
 
     if isSave_Video:
-            model_name = model_name + "_STGCN"
-            show_output.save_generated_sequence(refined_sequence, model_name) 
+            if model_name == "CVAE"
+                show_output.save_generated_sequence(refined_sequence, CVAE_STGCN_OUTPUT_FRAMES, CVAE__STGCN_OUTPUT_VIDEO)         
+            else :
+                show_output.save_generated_sequence(refined_sequence, CGAN_STGCN_OUTPUT_FRAMES, CGAN__STGCN_OUTPUT_VIDEO)                         
+        
      return refined_sequence

@@ -68,5 +68,5 @@ def get_cgan_sequence(word, isSave_Video):
             json.dump(generated_sequence.tolist(), json_file)
             print("Saved successfully")
         if isSave_Video:
-            show_output.save_generated_sequence(generated_sequence, "CVAE") 
+            show_output.save_generated_sequence(generated_sequence, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO) 
     return generated_sequence
