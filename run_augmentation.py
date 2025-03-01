@@ -3,7 +3,8 @@ import json
 import numpy as np
 from collections import defaultdict
 from augmentation import (generate_params, shear_landmarks, 
-                        translate_landmarks, scale_landmarks)
+                        translate_landmarks, scale_landmarks, 
+                        denormalize_landmarks, normalize_landmarks, augment_skeleton_sequence)
 from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
 from config import *
 
@@ -49,10 +50,15 @@ def augment_and_save(input_path, output_path):
                 
                 for frame in video:
                     frame = np.array(frame, dtype=np.float32)
+                    frame = denormalize_landmarks(frame)
                     
                     sheared_frame = shear_landmarks(frame, shear_params)
                     translated_frame = translate_landmarks(frame, trans_params)
                     scaled_frame = scale_landmarks(frame, scale_params)
+                    
+                    sheared_frame = normalize_landmarks(sheared_frame)
+                    translated_frame = normalize_landmarks(translated_frame)
+                    scaled_frame = normalize_landmarks(scaled_frame)
                     
                     shearing_video.append(sheared_frame.tolist())
                     translation_video.append(translated_frame.tolist())

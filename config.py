@@ -41,6 +41,8 @@ CVAE__STGCN_OUTPUT_VIDEO = os.path.join(OUTPUTS_PATH, "cvae_stgcn_video", "video
 CGAN_STGCN_OUTPUT_VIDEO = os.path.join(OUTPUTS_PATH, "cgan_stgcn_video", "video.mp4")
 MHA_OUTPUT_VIDEO = os.path.join(OUTPUTS_PATH, "mha_video", "video.mp4")
 
+FRAME_WIDTH = 224  
+FRAME_HEIGHT = 224 
 
 def get_paths(chunk_index=0):
     return {

@@ -27,7 +27,7 @@ pose = mp_pose.Pose(static_image_mode=False, model_complexity=1, min_detection_c
 
 
 def process_frame(frame):
-    frame = cv2.resize(frame, (224, 224))
+    frame = cv2.resize(frame, (FRAME_HEIGHT, FRAME_WIDTH))
     return frame
 
 

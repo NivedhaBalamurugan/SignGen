@@ -48,3 +48,35 @@ def prepare_training_data(skeleton_data, word_embeddings):
             all_word_vectors.append(word_embeddings[word])
 
     return np.array(all_skeleton_sequences), np.array(all_word_vectors)
+
+def normalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
+    """
+    Normalize landmarks to MediaPipe's format (0 to 1).
+    Only normalize x and y coordinates, preserve z as it's already normalized.
+    
+    Args:
+        landmarks: numpy array of shape (N, 3) where N is number of landmarks
+    Returns:
+        normalized landmarks of the same shape
+    """
+    normalized = landmarks.copy()
+    normalized[:, 0] = normalized[:, 0] / FRAME_WIDTH
+    normalized[:, 1] = normalized[:, 1] / FRAME_HEIGHT
+    
+    return normalized
+
+def denormalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
+    """
+    Convert normalized landmarks back to pixel coordinates.
+    Only denormalize x and y coordinates, preserve z as it's relative depth.
+    
+    Args:
+        landmarks: numpy array of shape (N, 3) where N is number of landmarks
+    Returns:
+        denormalized landmarks of the same shape
+    """
+    denormalized = landmarks.copy()
+    denormalized[:, 0] = denormalized[:, 0] * FRAME_WIDTH
+    denormalized[:, 1] = denormalized[:, 1] * FRAME_HEIGHT
+    
+    return denormalized
