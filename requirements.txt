@@ -11,3 +11,4 @@ torch
 torchvision
 torchaudio
 ffmpeg
+scikit-image

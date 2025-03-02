@@ -56,6 +56,7 @@ class LandmarkDataset(Dataset):
                                 self.data.append((padded_video, gloss))
                     except Exception as e:
                         logging.error(f"Error processing {file_path}: {e}")
+            logging.info(f"Completed reading from {file_path}")
     
     def _pad_video(self, video):
         
