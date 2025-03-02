@@ -53,3 +53,5 @@ def get_cvae_sequence(asl_word, isSave_Video=False):
     
     return generated_skeleton
 
+if __name__ == "__main__":
+    get_cvae_sequence("anatomy",1)

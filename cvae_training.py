@@ -28,7 +28,7 @@ class LandmarkDataset(Dataset):
         self.data = []
         self.vocab = {}
         self._load_process_data(file_paths)
-        logging.info(f"Dataset processing complete. Max sequence length: {MAX_FRAMES}, Vocabulary size: {len(self.vocab)}")
+        logging.info(f"Dataset processing complete. Max sequence length: {MAX_FRAMES}, Vocabulary size: {len(self.vocab)}, data size: {len(self.data)}")
         self.glove_embeddings = WORD_EMBEDDINGS
         if not self.glove_embeddings or not validate_word_embeddings(self.glove_embeddings, EMBEDDING_DIM):
             return
@@ -53,6 +53,7 @@ class LandmarkDataset(Dataset):
                                     logging.error(f"Error converting video to numpy array for gloss '{gloss}'. Possible shape mismatch.")
                                     raise e
                                 
+                                self.data.append((padded_video, gloss))
                                 self.data.append((padded_video, gloss))
                     except Exception as e:
                         logging.error(f"Error processing {file_path}: {e}")
@@ -85,11 +86,10 @@ class LandmarkDataset(Dataset):
 
 
 def train(model, train_loader, val_loader, device, num_epochs, lr, beta=0.5):
-    
     logging.info("Starting training...")
     model.train()
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)  # Added weight decay
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
     scaler = GradScaler()
     best_val_loss = float('inf')
     patience = 15
@@ -106,14 +106,14 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta=0.5):
             if torch.cuda.is_available():
                 with autocast():
                     recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
+                    recon_loss = nn.functional.mse_loss(recon_video, video.view(video.size(0), video.size(1), -1))
                     z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                    # Include beta in the loss calculation
-                    loss = beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
+                    loss = recon_loss + beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
             else:
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
+                recon_loss = nn.functional.mse_loss(recon_video, video.view(video.size(0), video.size(1), -1))
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                # Include beta in the loss calculation
-                loss = beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
+                loss = recon_loss + beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
 
             scaler.scale(loss).backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -134,8 +134,8 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta=0.5):
                 condition = batch['condition'].to(device)
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                # Include beta in the validation loss calculation
-                loss = beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
+                recon_loss = nn.functional.mse_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                loss = recon_loss + beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_loader.dataset)
@@ -156,6 +156,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta=0.5):
             if patience_counter >= patience:
                 logging.info("Early stopping triggered.")
                 break
+
 
 ##eval metrics
 
@@ -247,13 +248,14 @@ def main():
 
     logging.info("Model initialized. Starting training...")
 
-    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.0005, beta=0.5)
+    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.0001, beta=0.1)
 
     logging.info("Model saved successfully ")
 
     
-    input_shape = (MAX_FRAMES, CVAE_INPUT_DIM)
-    summary(model, input_size=input_shape)
+    input_shape = (CVAE_BATCH_SIZE, MAX_FRAMES, CVAE_INPUT_DIM)
+    cond_shape = (CVAE_BATCH_SIZE, EMBEDDING_DIM)
+    summary(model, input_size=[input_shape, cond_shape])
 
     evaluate_model(model, val_loader, device)
 
