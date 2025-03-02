@@ -44,6 +44,7 @@ class LandmarkDataset(Dataset):
                         for gloss, videos in item.items():
                             if gloss not in self.vocab:
                                 self.vocab[gloss] = len(self.vocab)
+                            # cond_vector = WORD_EMBEDDINGS.get(asl_word, np.zeros(EMBEDDING_DIM))
                             for video in videos:
                                 padded_video = self._pad_video(video)
                                 
@@ -85,7 +86,7 @@ class LandmarkDataset(Dataset):
         return sample
 
 
-def train(model, train_loader, val_loader, device, num_epochs, lr, beta=0.5):
+def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.1, beta_max=4.0, lambda_lc=0.1):
     logging.info("Starting training...")
     model.train()
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)  # Added weight decay
@@ -98,6 +99,8 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta=0.5):
     for epoch in range(num_epochs):
         logging.info(f"\nEpoch {epoch+1}/{num_epochs}...")
         epoch_loss = 0.0
+        beta = min(beta_max, beta_start + (epoch / 10))  # Dynamically increase beta
+
         for i, batch in enumerate(train_loader):
             optimizer.zero_grad()
             video = batch['video'].to(device)
@@ -106,15 +109,28 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta=0.5):
             if torch.cuda.is_available():
                 with autocast():
                     recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
-                    recon_loss = nn.functional.mse_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                    
+                    # Smooth L1 Loss instead of MSE
+                    recon_loss = F.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                    
+                    # Compute KL Loss (Ensure mean over batch)
+                    kl_loss = kl_divergence_loss(mu, logvar).mean()
+
+                    # Generate a normal latent vector for classification loss
                     z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                    loss = recon_loss + beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
+                    lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
+
+                    # Final Loss Calculation
+                    loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
             else:
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
-                recon_loss = nn.functional.mse_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                recon_loss = F.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                kl_loss = kl_divergence_loss(mu, logvar).mean()
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                loss = recon_loss + beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
+                lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
+                loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
 
+            # Backpropagation
             scaler.scale(loss).backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             scaler.step(optimizer)
@@ -123,7 +139,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta=0.5):
             epoch_loss += loss.item()
 
             if i % 10 == 0:
-                logging.info(f"  Batch {i}/{len(train_loader)} | Loss: {loss.item():.4f}")
+                logging.info(f"  Batch {i}/{len(train_loader)} | Loss: {loss.item():.4f} | Recon: {recon_loss.item():.4f} | KL: {kl_loss.item():.4f} | LC: {lc_loss.item():.4f}")
 
         # Validation
         val_loss = 0.0
@@ -134,15 +150,17 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta=0.5):
                 condition = batch['condition'].to(device)
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                recon_loss = nn.functional.mse_loss(recon_video, video.view(video.size(0), video.size(1), -1))
-                loss = recon_loss + beta * kl_divergence_loss(mu, logvar) + latent_classification_loss(z_v, z_g, model.latent_classifier)
+                recon_loss = F.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                kl_loss = kl_divergence_loss(mu, logvar).mean()
+                lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
+                loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
                 val_loss += loss.item()
 
         avg_val_loss = val_loss / len(val_loader.dataset)
         scheduler.step(avg_val_loss)
 
         logging.info(f"Epoch {epoch+1} completed. Avg Loss: {epoch_loss/len(train_loader.dataset):.4f}")
-        logging.info(f"Validation Loss: {avg_val_loss:.4f}")
+        logging.info(f"Validation Loss: {avg_val_loss:.4f} | Beta: {beta:.2f}")
         logging.info(f"Learning Rate: {scheduler.optimizer.param_groups[0]['lr']}")
 
         # Early stopping
@@ -248,7 +266,7 @@ def main():
 
     logging.info("Model initialized. Starting training...")
 
-    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.0001, beta=0.1)
+    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.0001, beta_start=0.1, beta_max=4.0, lambda_lc=0.1)
 
     logging.info("Model saved successfully ")
 
