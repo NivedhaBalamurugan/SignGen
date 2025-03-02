@@ -17,7 +17,7 @@ class Attention(nn.Module):
 class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, latent_dim, dropout_prob=0.5):  # Increased dropout
         super(Encoder, self).__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True, bidirectional=True, num_layers=2)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True, bidirectional=True, num_layers=1)
         self.attention = Attention(hidden_dim * 2)
         self.fc_mu = nn.Linear(hidden_dim * 4, latent_dim)
         self.fc_logvar = nn.Linear(hidden_dim * 4, latent_dim)
@@ -54,7 +54,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.seq_len = seq_len
         self.fc = nn.Linear(latent_dim + cond_dim, latent_dim + cond_dim)
-        self.lstm = nn.LSTM(latent_dim + cond_dim, hidden_dim, batch_first=True, num_layers=2)
+        self.lstm = nn.LSTM(latent_dim + cond_dim, hidden_dim, batch_first=True, num_layers=1)
         self.fc_out = nn.Linear(hidden_dim, output_dim)
         self.batch_norm = nn.BatchNorm1d(hidden_dim)
         self.dropout = nn.Dropout(p=dropout_prob)  # Increased dropout
@@ -103,7 +103,7 @@ class ConditionalVAE(nn.Module):
         z, mu, logvar, attn_weights = self.encoder(x)
         recon_x = self.decoder(z, cond)
         return recon_x, mu, logvar, attn_weights, z
-        
+
 
 def kl_divergence_loss(mu, logvar):
     return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())

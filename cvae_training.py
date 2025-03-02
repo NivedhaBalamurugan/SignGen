@@ -124,7 +124,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
                     loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
             else:
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
-                recon_loss = F.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
                 kl_loss = kl_divergence_loss(mu, logvar).mean()
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
                 lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
@@ -132,7 +132,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
 
             # Backpropagation
             scaler.scale(loss).backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
             scaler.step(optimizer)
             scaler.update()
 
@@ -150,7 +150,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
                 condition = batch['condition'].to(device)
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                recon_loss = F.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
                 kl_loss = kl_divergence_loss(mu, logvar).mean()
                 lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
                 loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
@@ -266,7 +266,7 @@ def main():
 
     logging.info("Model initialized. Starting training...")
 
-    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.0001, beta_start=0.1, beta_max=4.0, lambda_lc=0.1)
+    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.001, beta_start=0.01, beta_max=4.0, lambda_lc=0.01)
 
     logging.info("Model saved successfully ")
 
