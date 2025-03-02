@@ -2,7 +2,7 @@ import os
 import json
 import numpy as np
 from collections import defaultdict
-from augmentation import (generate_params, generate_shear_params, shear_landmarks, 
+from augmentation import (generate_params, shear_landmarks, 
                         translate_landmarks, scale_landmarks)
 from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
 from utils.data_utils import (denormalize_landmarks, normalize_landmarks)
@@ -35,8 +35,8 @@ def augment_and_save(input_path, output_path):
             
             word_stats[word] = {
                 'original_videos': word_videos,
-                'augmented_videos': word_videos * 7,
-                'total_videos': word_videos * 8
+                'augmented_videos': word_videos * 6,
+                'total_videos': word_videos * 7
             }
 
             for video_idx, video in enumerate(videos, 1):
@@ -44,11 +44,9 @@ def augment_and_save(input_path, output_path):
                 
                 shearing_video, translation_video, scaling_video = [], [], []
                 shearing_video_2, translation_video_2, scaling_video_2 = [], [], []
-                shearing_video_3 = []
                 
                 shear_params, trans_params, scale_params = generate_params()
                 shear_params_2, trans_params_2, scale_params_2 = generate_params()
-                shear_params_3 = generate_shear_params()
                 
                 for frame in video:
                     frame = np.array(frame, dtype=np.float32)
@@ -60,7 +58,6 @@ def augment_and_save(input_path, output_path):
                     sheared_frame_2 = shear_landmarks(frame, shear_params_2)
                     translated_frame_2 = translate_landmarks(frame, trans_params_2)
                     scaled_frame_2 = scale_landmarks(frame, scale_params_2)
-                    sheared_frame_3 = shear_landmarks(frame, shear_params_3)
                     
                     sheared_frame = normalize_landmarks(sheared_frame)
                     translated_frame = normalize_landmarks(translated_frame)
@@ -68,7 +65,6 @@ def augment_and_save(input_path, output_path):
                     sheared_frame_2 = normalize_landmarks(sheared_frame_2)
                     translated_frame_2 = normalize_landmarks(translated_frame_2)
                     scaled_frame_2 = normalize_landmarks(scaled_frame_2)
-                    sheared_frame_3 = normalize_landmarks(sheared_frame_3)
                     
                     shearing_video.append(sheared_frame.tolist())
                     translation_video.append(translated_frame.tolist())
@@ -76,7 +72,6 @@ def augment_and_save(input_path, output_path):
                     shearing_video_2.append(sheared_frame_2.tolist())
                     translation_video_2.append(translated_frame_2.tolist())
                     scaling_video_2.append(scaled_frame_2.tolist())
-                    shearing_video_3.append(sheared_frame_3.tolist())
                 
                 augmented_data[word].append(shearing_video)
                 augmented_data[word].append(translation_video)
@@ -84,8 +79,7 @@ def augment_and_save(input_path, output_path):
                 augmented_data[word].append(shearing_video_2)
                 augmented_data[word].append(translation_video_2)
                 augmented_data[word].append(scaling_video_2)
-                augmented_data[word].append(shearing_video_3)
-                total_augmented += 7
+                total_augmented += 6
                 
                 logging.info(f"Processed video {video_idx}/{word_videos} for word '{word}'")
 
@@ -108,15 +102,6 @@ def augment_and_save(input_path, output_path):
     except Exception as e:
         logging.error(f"Error during augmentation: {e}")
         return
-
-    try:
-        save_jsonl_gz(output_path, augmented_data, single_object=True)
-        logging.info(f"Successfully processed {total_videos} original videos")
-        logging.info(f"Generated {total_augmented} augmented videos")
-        logging.info(f"Total videos in output: {total_videos + total_augmented}")
-        logging.info(f"Augmented landmarks saved to {output_path}")
-    except Exception as e:
-        logging.error(f"Error saving augmented landmarks: {e}")
 
 def main():
     os.makedirs(AUGMENTED_PATH, exist_ok=True)
