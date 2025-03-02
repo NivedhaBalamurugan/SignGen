@@ -111,7 +111,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
                     recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                     
                     # Smooth L1 Loss instead of MSE
-                    recon_loss = F.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                    recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
                     
                     # Compute KL Loss (Ensure mean over batch)
                     kl_loss = kl_divergence_loss(mu, logvar).mean()
