@@ -93,34 +93,32 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     total_disc_loss = 0.0
 
     num_samples = word_vectors.shape[0]
-    num_batches = max(1, num_samples // batch_size)
-    trimmed_size = num_batches * batch_size
-    chunks_per_epoch = max(1, trimmed_size // MAX_SAMPLES_PER_BATCH)
+    chunks_per_epoch = max(1, num_samples // MAX_SAMPLES_PER_BATCH + (1 if num_samples % MAX_SAMPLES_PER_BATCH > 0 else 0))
 
-    word_vectors = word_vectors[:trimmed_size]
-    skeleton_sequences = skeleton_sequences[:trimmed_size]
-
-    logging.info(f"Training with {num_batches} batches per epoch")
+    logging.info(f"Training with {num_samples} samples, {num_samples//batch_size + (1 if num_samples % batch_size > 0 else 0)} batches per epoch")
 
     early_stopping = tf.keras.callbacks.EarlyStopping(
         monitor='loss', patience=patience, restore_best_weights=True, verbose=1)
+    cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
     @tf.function
-    def train_step(word_vector, real_skeleton):
-        noise = tf.random.normal([batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
-        word_vector = tf.cast(word_vector, FP_PRECISION)
-        generator_input = tf.concat([word_vector, noise], axis=1)
+    def train_step(word_vector_batch, real_skeleton_batch):
+        actual_batch_size = tf.shape(word_vector_batch)[0]
+        
+        noise = tf.random.normal([actual_batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
+        word_vector_batch = tf.cast(word_vector_batch, FP_PRECISION)
+        generator_input = tf.concat([word_vector_batch, noise], axis=1)
 
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
             generated_skeleton = generator(generator_input, training=True)
 
-            real_skeleton = tf.cast(real_skeleton, FP_PRECISION)
+            real_skeleton_batch = tf.cast(real_skeleton_batch, FP_PRECISION)
             generated_skeleton = tf.cast(generated_skeleton, FP_PRECISION)
 
-            word_vector_expanded = tf.reshape(word_vector, (batch_size, 1, 1, 50))
+            word_vector_expanded = tf.reshape(word_vector_batch, (actual_batch_size, 1, 1, 50))
             word_vector_expanded = tf.tile(word_vector_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])
 
-            real_input = tf.concat([real_skeleton, word_vector_expanded], axis=-1)
+            real_input = tf.concat([real_skeleton_batch, word_vector_expanded], axis=-1)
             fake_input = tf.concat([generated_skeleton, word_vector_expanded], axis=-1)
 
             real_output = discriminator(real_input, training=True)
@@ -143,25 +141,30 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
 
         for chunk_idx in range(chunks_per_epoch):
             chunk_start = chunk_idx * MAX_SAMPLES_PER_BATCH
-            chunk_end = min(chunk_start + MAX_SAMPLES_PER_BATCH, trimmed_size)
+            chunk_end = min(chunk_start + MAX_SAMPLES_PER_BATCH, num_samples)
 
             word_vectors_chunk = word_vectors[chunk_start:chunk_end]
             skeleton_sequences_chunk = skeleton_sequences[chunk_start:chunk_end]
 
             chunk_size = chunk_end - chunk_start
-            chunk_batches = max(1, chunk_size // batch_size)
+            
+            full_batches = chunk_size // batch_size
+            has_partial_batch = chunk_size % batch_size > 0
+            chunk_batches = full_batches + (1 if has_partial_batch else 0)
 
             with tqdm(total=chunk_batches,
                       desc=f"Epoch {epoch+1}/{epochs} Chunk {chunk_idx+1}/{chunks_per_epoch}") as pbar:
 
-                for i in range(chunk_batches):
+                for i in range(full_batches):
                     if check_memory():
                         logging.info("Cleared memory during training")
 
                     try:
-                        batch_indices = np.random.choice(chunk_size, batch_size, replace=False)
-                        word_batch = word_vectors_chunk[batch_indices]
-                        skeleton_batch = skeleton_sequences_chunk[batch_indices]
+                        batch_start = i * batch_size
+                        batch_end = batch_start + batch_size
+                        
+                        word_batch = word_vectors_chunk[batch_start:batch_end]
+                        skeleton_batch = skeleton_sequences_chunk[batch_start:batch_end]
 
                         gen_loss, disc_loss = train_step(word_batch, skeleton_batch)
 
@@ -177,6 +180,30 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                     except Exception as e:
                         logging.error(f"Error in training batch: {e}")
                         continue
+                
+                if has_partial_batch:
+                    if check_memory():
+                        logging.info("Cleared memory during training")
+
+                    try:
+                        batch_start = full_batches * batch_size
+                        
+                        word_batch = word_vectors_chunk[batch_start:]
+                        skeleton_batch = skeleton_sequences_chunk[batch_start:]
+
+                        gen_loss, disc_loss = train_step(word_batch, skeleton_batch)
+
+                        epoch_gen_loss.update_state(gen_loss)
+                        epoch_disc_loss.update_state(disc_loss)
+
+                        pbar.set_postfix({
+                            'gen_loss': f'{gen_loss:.4f}',
+                            'disc_loss': f'{disc_loss:.4f}'
+                        })
+                        pbar.update(1)
+
+                    except Exception as e:
+                        logging.error(f"Error in training partial batch: {e}")
 
             del word_vectors_chunk, skeleton_sequences_chunk
             gc.collect()
@@ -196,7 +223,6 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         f"Training complete - Total Generator Loss: {total_gen_loss:.4f}, Total Discriminator Loss: {total_disc_loss:.4f}")
 
     return True, {'total_gen_loss': total_gen_loss, 'total_disc_loss': total_disc_loss}
-
 
 def main():
     if not validate_config():
