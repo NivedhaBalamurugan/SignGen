@@ -86,7 +86,7 @@ class LandmarkDataset(Dataset):
         return sample
 
 
-def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.1, beta_max=4.0, lambda_lc=0.1):
+def train(model, train_loader, val_loader, device, num_epochs, lr=0.001, beta_start=0.1, beta_max=4.0, lambda_lc=0.01):
     logging.info("Starting training...")
     model.train()
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)  # Added weight decay
@@ -95,11 +95,22 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
     best_val_loss = float('inf')
     patience = 15
     patience_counter = 0
+    warmup_epochs = 20  # KL warmup period
 
     for epoch in range(num_epochs):
         logging.info(f"\nEpoch {epoch+1}/{num_epochs}...")
         epoch_loss = 0.0
-        beta = min(beta_max, beta_start + (epoch / 10))  # Dynamically increase beta
+
+        # KL Warmup
+        if epoch < warmup_epochs:
+            beta = beta_start * (epoch / warmup_epochs)  # Gradually increase beta
+        else:
+            beta = beta_max
+
+        # Learning Rate Warmup
+        if epoch < 10:  # Warmup for 10 epochs
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr * ((epoch + 1) / 10)
 
         for i, batch in enumerate(train_loader):
             optimizer.zero_grad()
@@ -113,8 +124,8 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
                     # Smooth L1 Loss instead of MSE
                     recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
                     
-                    # Compute KL Loss (Ensure mean over batch)
-                    kl_loss = kl_divergence_loss(mu, logvar).mean()
+                    # Compute KL Loss (Ensure mean over batch) and enforce minimum KL loss
+                    kl_loss = kl_divergence_loss(mu, logvar).mean() + 1e-4  # Add 0.0001 to prevent collapse
 
                     # Generate a normal latent vector for classification loss
                     z_g = torch.normal(0, 1, size=z_v.shape).to(device)
@@ -125,14 +136,14 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
             else:
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                 recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
-                kl_loss = kl_divergence_loss(mu, logvar).mean()
+                kl_loss = kl_divergence_loss(mu, logvar).mean() + 1e-4  # Add 0.0001 to prevent collapse
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
                 lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
                 loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
 
             # Backpropagation
             scaler.scale(loss).backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  # Adjusted gradient clipping
             scaler.step(optimizer)
             scaler.update()
 
@@ -151,7 +162,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
                 recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
-                kl_loss = kl_divergence_loss(mu, logvar).mean()
+                kl_loss = kl_divergence_loss(mu, logvar).mean() + 1e-4  # Add 0.0001 to prevent collapse
                 lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
                 loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
                 val_loss += loss.item()
@@ -175,6 +186,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
                 logging.info("Early stopping triggered.")
                 break
 
+            
 
 ##eval metrics
 
@@ -271,9 +283,9 @@ def main():
     logging.info("Model saved successfully ")
 
     
-    input_shape = (CVAE_BATCH_SIZE, MAX_FRAMES, CVAE_INPUT_DIM)
-    cond_shape = (CVAE_BATCH_SIZE, EMBEDDING_DIM)
-    summary(model, input_size=[input_shape, cond_shape])
+    # input_shape = (CVAE_BATCH_SIZE, MAX_FRAMES, CVAE_INPUT_DIM)
+    # cond_shape = (CVAE_BATCH_SIZE, EMBEDDING_DIM)
+    # summary(model, input_size=[input_shape, cond_shape])
 
     evaluate_model(model, val_loader, device)
 
