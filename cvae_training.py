@@ -139,7 +139,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
             epoch_loss += loss.item()
 
             if i % 10 == 0:
-                logging.info(f"  Batch {i}/{len(train_loader)} | Loss: {loss.item():.4f} | Recon: {recon_loss.item():.4f} | KL: {kl_loss.item():.4f} | LC: {lc_loss.item():.4f}")
+                logging.info(f"  Batch {i}/{len(train_loader)} | Loss: {loss.item():.8f} | Recon: {recon_loss.item():.8f} | KL: {kl_loss.item():.8f} | LC: {lc_loss.item():.8f}")
 
         # Validation
         val_loss = 0.0
@@ -159,8 +159,8 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
         avg_val_loss = val_loss / len(val_loader.dataset)
         scheduler.step(avg_val_loss)
 
-        logging.info(f"Epoch {epoch+1} completed. Avg Loss: {epoch_loss/len(train_loader.dataset):.4f}")
-        logging.info(f"Validation Loss: {avg_val_loss:.4f} | Beta: {beta:.2f}")
+        logging.info(f"Epoch {epoch+1} completed. Avg Loss: {epoch_loss/len(train_loader.dataset):.8f}")
+        logging.info(f"Validation Loss: {avg_val_loss:.8f} | Beta: {beta:.8f}")
         logging.info(f"Learning Rate: {scheduler.optimizer.param_groups[0]['lr']}")
 
         # Early stopping
@@ -227,8 +227,8 @@ def evaluate_model(model, dataloader, device):
     avg_ssim = np.mean(ssim_values)
     latent_vectors = torch.cat(latent_vectors, dim=0)
     
-    logging.info(f"Average MSE: {avg_mse:.4f}")
-    logging.info(f"Average SSIM: {avg_ssim:.4f}")
+    logging.info(f"Average MSE: {avg_mse:.8f}")
+    logging.info(f"Average SSIM: {avg_ssim:.8f}")
     
 
 
@@ -266,7 +266,7 @@ def main():
 
     logging.info("Model initialized. Starting training...")
 
-    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.001, beta_start=0.01, beta_max=4.0, lambda_lc=0.01)
+    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.001, beta_start=0.1, beta_max=4.0, lambda_lc=0.01)
 
     logging.info("Model saved successfully ")
 

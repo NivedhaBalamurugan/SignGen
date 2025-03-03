@@ -15,15 +15,13 @@ class Attention(nn.Module):
         return context, attn_weights
 
 class Encoder(nn.Module):
-    def __init__(self, input_dim, hidden_dim, latent_dim, dropout_prob=0.5):  # Increased dropout
+    def __init__(self, input_dim, hidden_dim, latent_dim, dropout_prob=0.3):
         super(Encoder, self).__init__()
         self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True, bidirectional=True, num_layers=1)
         self.attention = Attention(hidden_dim * 2)
         self.fc_mu = nn.Linear(hidden_dim * 4, latent_dim)
         self.fc_logvar = nn.Linear(hidden_dim * 4, latent_dim)
-
-        self.batch_norm_hidden = nn.BatchNorm1d(hidden_dim * 2)
-        self.dropout = nn.Dropout(p=dropout_prob)  # Increased dropout
+        self.dropout = nn.Dropout(p=dropout_prob)
 
     def forward(self, x):
         B, T, _, _ = x.size()
@@ -31,12 +29,7 @@ class Encoder(nn.Module):
 
         mask = (x.sum(dim=2) != 0).float()
         outputs, (h_n, _) = self.lstm(x)
-
-        outputs = self.dropout(outputs)  # Dropout after LSTM
-
-        outputs = outputs.permute(0, 2, 1)
-        outputs = self.batch_norm_hidden(outputs)
-        outputs = outputs.permute(0, 2, 1)
+        outputs = self.dropout(outputs)
 
         context, attn_weights = self.attention(outputs, mask)
 
@@ -48,16 +41,14 @@ class Encoder(nn.Module):
 
         return z, mu, logvar, attn_weights
 
-
 class Decoder(nn.Module):
-    def __init__(self, latent_dim, cond_dim, hidden_dim, output_dim, seq_len, dropout_prob=0.5):  # Increased dropout
+    def __init__(self, latent_dim, cond_dim, hidden_dim, output_dim, seq_len, dropout_prob=0.3):
         super(Decoder, self).__init__()
         self.seq_len = seq_len
         self.fc = nn.Linear(latent_dim + cond_dim, latent_dim + cond_dim)
         self.lstm = nn.LSTM(latent_dim + cond_dim, hidden_dim, batch_first=True, num_layers=1)
         self.fc_out = nn.Linear(hidden_dim, output_dim)
-        self.batch_norm = nn.BatchNorm1d(hidden_dim)
-        self.dropout = nn.Dropout(p=dropout_prob)  # Increased dropout
+        self.dropout = nn.Dropout(p=dropout_prob)
 
     def forward(self, z, cond):
         B = z.size(0)
@@ -67,24 +58,19 @@ class Decoder(nn.Module):
         z_seq = z_cond.unsqueeze(1).repeat(1, self.seq_len, 1)
         outputs, _ = self.lstm(z_seq)
 
-        outputs = self.dropout(outputs)  # Dropout after LSTM
-
-        outputs = outputs.permute(0, 2, 1)
-        outputs = self.batch_norm(outputs)
-        outputs = outputs.permute(0, 2, 1)
-
-        outputs = self.dropout(outputs)  # Dropout before output layer
+        outputs = self.dropout(outputs)
+        outputs = self.dropout(outputs)
 
         recon_seq = torch.tanh(self.fc_out(outputs))
         return recon_seq
 
 class LatentClassifier(nn.Module):
-    def __init__(self, latent_dim, dropout_prob=0.5):  # Added dropout
+    def __init__(self, latent_dim, dropout_prob=0.3):
         super(LatentClassifier, self).__init__()
         self.fc = nn.Sequential(
             nn.Linear(latent_dim, 64),
             nn.ReLU(),
-            nn.Dropout(p=dropout_prob),  # Added dropout
+            nn.Dropout(p=dropout_prob),
             nn.Linear(64, 1),
             nn.Sigmoid()
         )
@@ -95,15 +81,14 @@ class LatentClassifier(nn.Module):
 class ConditionalVAE(nn.Module):
     def __init__(self, input_dim, hidden_dim, latent_dim, cond_dim, output_dim, seq_len):
         super(ConditionalVAE, self).__init__()
-        self.encoder = Encoder(input_dim, hidden_dim, latent_dim, dropout_prob=0.5)  # Increased dropout
-        self.decoder = Decoder(latent_dim, cond_dim, hidden_dim, output_dim, seq_len, dropout_prob=0.5)  # Increased dropout
-        self.latent_classifier = LatentClassifier(latent_dim, dropout_prob=0.5)  # Added dropout
+        self.encoder = Encoder(input_dim, hidden_dim, latent_dim, dropout_prob=0.3)
+        self.decoder = Decoder(latent_dim, cond_dim, hidden_dim, output_dim, seq_len, dropout_prob=0.3)
+        self.latent_classifier = LatentClassifier(latent_dim, dropout_prob=0.3)
 
     def forward(self, x, cond):
         z, mu, logvar, attn_weights = self.encoder(x)
         recon_x = self.decoder(z, cond)
         return recon_x, mu, logvar, attn_weights, z
-
 
 def kl_divergence_loss(mu, logvar):
     return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
