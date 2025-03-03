@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import logging
+from logging.handlers import RotatingFileHandler
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -62,8 +63,9 @@ def get_paths(chunk_index=0):
 FINAL_JSONL_PATHS = os.path.join(FINAL_PATH, "*.jsonl")
 
 # Model paths
-CGAN_GEN_PATH = os.path.join(MODELS_PATH, "cgan_generator.keras")
-CGAN_DIS_PATH = os.path.join(MODELS_PATH, "cgan_discriminator.keras")
+CGAN_MODEL_PATH = os.path.join(MODELS_PATH, "cgan_model")
+CGAN_GEN_PATH = os.path.join(CGAN_MODEL_PATH, "cgan_generator.keras")
+CGAN_DIS_PATH = os.path.join(CGAN_MODEL_PATH, "cgan_discriminator.keras")
 CVAE_MODEL_PATH = os.path.join(MODELS_PATH, "cvae_model")
 STGCN_MODEL_PATH = os.path.join(MODELS_PATH, "stgcn_model")
 
@@ -92,8 +94,16 @@ IN_CHANNELS = 3
 NUM_NODES = 49
 HIDDEN_DIM = 128
 
+# Global variable to store embeddings
+_WORD_EMBEDDINGS = None
 
 def load_word_embeddings(filepath):
+    """Lazy loading of word embeddings using singleton pattern"""
+    global _WORD_EMBEDDINGS
+    
+    if _WORD_EMBEDDINGS is not None:
+        return _WORD_EMBEDDINGS
+        
     if not os.path.exists(filepath):
         logging.error(f"Word embeddings file not found: {filepath}")
         return None
@@ -107,12 +117,52 @@ def load_word_embeddings(filepath):
                 vector = np.asarray(values[1:], dtype=FP_PRECISION)
                 word_embeddings[word] = vector
         logging.info(f"Loaded {len(word_embeddings)} word embeddings")
-        return word_embeddings
+        _WORD_EMBEDDINGS = word_embeddings
+        return _WORD_EMBEDDINGS
     except Exception as e:
         logging.error(f"Error loading word embeddings: {e}")
         return None
 
 #Glove parameters
 EMBEDDING_DIM = 50
-WORD_EMBEDDINGS = load_word_embeddings(GLOVE_TXT_PATH)
 
+def get_word_embeddings():
+    return load_word_embeddings(GLOVE_TXT_PATH)
+
+WORD_EMBEDDINGS = get_word_embeddings()
+
+
+def setup_logging(model):
+    from datetime import datetime
+    
+    log_dir = os.path.join(BASE_PATH, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Add timestamp to log filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(log_dir, f"{model}_{timestamp}.log")
+    
+    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    file_handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=10*1024*1024,
+        backupCount=5
+    )
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(file_formatter)
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(console_formatter)
+    
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    logger.handlers = []
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    logging.info(f"Logging to: {log_file}")
