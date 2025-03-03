@@ -18,7 +18,6 @@ class Encoder(nn.Module):
     def __init__(self, input_dim, hidden_dim, latent_dim, dropout_prob=0.3):
         super(Encoder, self).__init__()
         self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True, bidirectional=True, num_layers=1)
-        self.layer_norm = nn.LayerNorm(hidden_dim * 2)
         self.attention = Attention(hidden_dim * 2)
         self.fc_mu = nn.Linear(hidden_dim * 4, latent_dim)
         self.fc_logvar = nn.Linear(hidden_dim * 4, latent_dim)
@@ -30,7 +29,6 @@ class Encoder(nn.Module):
 
         mask = (x.sum(dim=2) != 0).float()
         outputs, (h_n, _) = self.lstm(x)
-        outputs = self.layer_norm(outputs) 
         outputs = self.dropout(outputs)
 
         context, attn_weights = self.attention(outputs, mask)
@@ -44,12 +42,11 @@ class Encoder(nn.Module):
         return z, mu, logvar, attn_weights
 
 class Decoder(nn.Module):
-    def __init__(self, latent_dim, cond_dim, hidden_dim, output_dim, seq_len, dropout_prob=0.1):
+    def __init__(self, latent_dim, cond_dim, hidden_dim, output_dim, seq_len, dropout_prob=0.3):
         super(Decoder, self).__init__()
         self.seq_len = seq_len
         self.fc = nn.Linear(latent_dim + cond_dim, latent_dim + cond_dim)
         self.lstm = nn.LSTM(latent_dim + cond_dim, hidden_dim, batch_first=True, num_layers=2)
-        self.layer_norm = nn.LayerNorm(hidden_dim) 
         self.fc_out = nn.Linear(hidden_dim, output_dim)
         self.dropout = nn.Dropout(p=dropout_prob)
 
@@ -60,7 +57,6 @@ class Decoder(nn.Module):
 
         z_seq = z_cond.unsqueeze(1).repeat(1, self.seq_len, 1)
         outputs, _ = self.lstm(z_seq)
-        outputs = self.layer_norm(outputs) 
         outputs = self.dropout(outputs)
         outputs = self.dropout(outputs)
 
