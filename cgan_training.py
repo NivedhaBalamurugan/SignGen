@@ -1,7 +1,6 @@
 import os
 import glob
 import gc
-import logging
 import psutil
 import numpy as np
 import tensorflow as tf
@@ -13,6 +12,8 @@ from utils.model_utils import save_model_and_history, log_model_summary, log_tra
 from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import build_generator, build_discriminator, discriminator_loss
 from scipy.stats import entropy
+
+setup_logging("cgan_training")
 
 FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000
@@ -263,6 +264,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     return True, {'total_gen_loss': total_gen_loss, 'total_disc_loss': total_disc_loss}
 
 def main():
+    logging.info("Starting CGAN training process...")
     if not validate_config():
         return
 

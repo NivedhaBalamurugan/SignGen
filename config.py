@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import logging
+from logging.handlers import RotatingFileHandler
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -129,3 +130,38 @@ def get_word_embeddings():
 
 WORD_EMBEDDINGS = get_word_embeddings()
 
+
+def setup_logging(model):
+    from datetime import datetime
+    
+    log_dir = os.path.join(BASE_PATH, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Add timestamp to log filename
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = os.path.join(log_dir, f"{model}_{timestamp}.log")
+    
+    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    file_handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=10*1024*1024,
+        backupCount=5
+    )
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(file_formatter)
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(console_formatter)
+    
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    
+    logger.handlers = []
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    logging.info(f"Logging to: {log_file}")
