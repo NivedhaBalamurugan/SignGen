@@ -1,7 +1,6 @@
 import os
 import glob
 import gc
-import logging
 import psutil
 import numpy as np
 import tensorflow as tf
@@ -13,6 +12,8 @@ from utils.model_utils import save_model_and_history, log_model_summary, log_tra
 from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import build_generator, build_discriminator, discriminator_loss
 from scipy.stats import entropy
+
+setup_logging("cgan_training")
 
 FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000
@@ -97,8 +98,12 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
 
     logging.info(f"Training with {num_samples} samples, {num_samples//batch_size + (1 if num_samples % batch_size > 0 else 0)} batches per epoch")
 
-    early_stopping = tf.keras.callbacks.EarlyStopping(
-        monitor='loss', patience=patience, restore_best_weights=True, verbose=1)
+    # Define parameters for early stopping
+    best_loss = float('inf')
+    patience_counter = 0
+    best_generator_weights = None
+    best_discriminator_weights = None
+    
     cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
     @tf.function
@@ -134,6 +139,15 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
 
         return gen_loss, disc_loss
+    
+    # Function to get model weights
+    def get_model_weights(model):
+        return [var.numpy() for var in model.weights]
+    
+    # Function to set model weights
+    def set_model_weights(model, weights):
+        for i, weight in enumerate(weights):
+            model.weights[i].assign(weight)
 
     for epoch in range(epochs):
         epoch_gen_loss = tf.keras.metrics.Mean()
@@ -208,16 +222,41 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             del word_vectors_chunk, skeleton_sequences_chunk
             gc.collect()
 
-        total_gen_loss += epoch_gen_loss.result().numpy()
-        total_disc_loss += epoch_disc_loss.result().numpy()
+        # Calculate epoch losses
+        epoch_gen_loss_value = epoch_gen_loss.result().numpy()
+        epoch_disc_loss_value = epoch_disc_loss.result().numpy()
+        
+        # Calculate combined loss for early stopping
+        combined_loss = epoch_gen_loss_value + epoch_disc_loss_value
+        
+        total_gen_loss += epoch_gen_loss_value
+        total_disc_loss += epoch_disc_loss_value
 
         logging.info(f"Epoch {epoch+1}/{epochs} - "
-                     f"Gen Loss: {epoch_gen_loss.result():.4f}, "
-                     f"Disc Loss: {epoch_disc_loss.result():.4f}")
-
-        if early_stopping.stopped_epoch > 0:
-            logging.info(f"Early stopping triggered at epoch {epoch+1}")
-            break
+                     f"Gen Loss: {epoch_gen_loss_value:.4f}, "
+                     f"Disc Loss: {epoch_disc_loss_value:.4f}, "
+                     f"Combined Loss: {combined_loss:.4f}")
+        
+        # Check for improvement for early stopping
+        if combined_loss < best_loss:
+            logging.info(f"Loss improved from {best_loss:.4f} to {combined_loss:.4f}")
+            best_loss = combined_loss
+            patience_counter = 0
+            # Save the best model weights
+            best_generator_weights = get_model_weights(generator)
+            best_discriminator_weights = get_model_weights(discriminator)
+        else:
+            patience_counter += 1
+            logging.info(f"No improvement in loss. Patience: {patience_counter}/{patience}")
+            
+            if patience_counter >= patience:
+                logging.info(f"Early stopping triggered at epoch {epoch+1}")
+                # Restore best weights
+                if best_generator_weights is not None and best_discriminator_weights is not None:
+                    logging.info("Restoring best model weights")
+                    set_model_weights(generator, best_generator_weights)
+                    set_model_weights(discriminator, best_discriminator_weights)
+                break
 
     logging.info(
         f"Training complete - Total Generator Loss: {total_gen_loss:.4f}, Total Discriminator Loss: {total_disc_loss:.4f}")
@@ -225,6 +264,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     return True, {'total_gen_loss': total_gen_loss, 'total_disc_loss': total_disc_loss}
 
 def main():
+    logging.info("Starting CGAN training process...")
     if not validate_config():
         return
 
