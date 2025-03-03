@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch import optim
 from architectures.cvae import ConditionalVAE, kl_divergence_loss, latent_classification_loss
-from torch.optim.lr_scheduler import ReduceLROnPlateau 
+from torch.optim.lr_scheduler import CosineAnnealingLR 
 from torch.optim import AdamW
 from torch.amp import GradScaler, autocast
 from utils.glove_utils import validate_word_embeddings
@@ -90,7 +90,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
     logging.info("Starting training...")
     model.train()
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)  # Added weight decay
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
+    scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-5)    
     scaler = GradScaler()
     best_val_loss = float('inf')
     patience = 15
@@ -99,7 +99,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
     for epoch in range(num_epochs):
         logging.info(f"\nEpoch {epoch+1}/{num_epochs}...")
         epoch_loss = 0.0
-        beta = min(beta_max, beta_start + (epoch / 10))  # Dynamically increase beta
+        beta = min(beta_max, beta_start + (epoch / 20))  # Dynamically increase beta
 
         for i, batch in enumerate(train_loader):
             optimizer.zero_grad()
@@ -132,7 +132,24 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
 
             # Backpropagation
             scaler.scale(loss).backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            # === Add gradient monitoring here ===
+            total_grad_norm = 0.0
+            max_grad = -float('inf')
+            min_grad = float('inf')
+
+            # Calculate gradient statistics
+            for param in model.parameters():
+                if param.grad is not None:
+                    grad_norm = param.grad.norm().item()
+                    total_grad_norm += grad_norm
+                    max_grad = max(max_grad, param.grad.abs().max().item())
+                    min_grad = min(min_grad, param.grad.abs().min().item())
+
+            # Log gradients every 10 batches
+            if i % 10 == 0:
+                logging.info(f"  Grad Norm: {total_grad_norm:.4f} | Max Grad: {max_grad:.4f} | Min Grad: {min_grad:.4f}")
+            # === End of gradient monitoring ===
             scaler.step(optimizer)
             scaler.update()
 
@@ -266,14 +283,14 @@ def main():
 
     logging.info("Model initialized. Starting training...")
 
-    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.001, beta_start=0.1, beta_max=4.0, lambda_lc=0.01)
+    train(model, train_loader, val_loader, device, num_epochs=80, lr=0.005, beta_start=0.1, beta_max=4.0, lambda_lc=0.1)
 
     logging.info("Model saved successfully ")
 
     
-    input_shape = (CVAE_BATCH_SIZE, MAX_FRAMES, CVAE_INPUT_DIM)
-    cond_shape = (CVAE_BATCH_SIZE, EMBEDDING_DIM)
-    summary(model, input_size=[input_shape, cond_shape])
+    # input_shape = (CVAE_BATCH_SIZE, MAX_FRAMES, CVAE_INPUT_DIM)
+    # cond_shape = (CVAE_BATCH_SIZE, EMBEDDING_DIM)
+    # summary(model, input_size=[input_shape, cond_shape])
 
     evaluate_model(model, val_loader, device)
 
