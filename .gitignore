@@ -2,6 +2,7 @@ __pycache__/
 Dataset/
 Models/
 Outputs/
+logs/
 
 [0-9]_body_landmarks.json
 [0-9]_body_landmarks.jsonl.gz

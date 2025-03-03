@@ -63,8 +63,9 @@ def get_paths(chunk_index=0):
 FINAL_JSONL_PATHS = os.path.join(FINAL_PATH, "*.jsonl")
 
 # Model paths
-CGAN_GEN_PATH = os.path.join(MODELS_PATH, "cgan_generator.keras")
-CGAN_DIS_PATH = os.path.join(MODELS_PATH, "cgan_discriminator.keras")
+CGAN_MODEL_PATH = os.path.join(MODELS_PATH, "cgan_model")
+CGAN_GEN_PATH = os.path.join(CGAN_MODEL_PATH, "cgan_generator.keras")
+CGAN_DIS_PATH = os.path.join(CGAN_MODEL_PATH, "cgan_discriminator.keras")
 CVAE_MODEL_PATH = os.path.join(MODELS_PATH, "cvae_model")
 STGCN_MODEL_PATH = os.path.join(MODELS_PATH, "stgcn_model")
 
