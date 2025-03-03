@@ -10,12 +10,19 @@ from torch import optim
 from architectures.cvae import ConditionalVAE, kl_divergence_loss, latent_classification_loss
 from torch.optim.lr_scheduler import CosineAnnealingLR 
 from torch.optim import AdamW
-from torch.amp import GradScaler, autocast
+import torch.cuda.amp as amp  # Changed import
 from utils.glove_utils import validate_word_embeddings
 from utils.validation_utils import validate_data_shapes, validate_config
 from torchsummary import summary
 from config import *
 import warnings
+
+class nullcontext:
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
 
 warnings.filterwarnings("ignore")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -91,7 +98,12 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
     model.train()
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)  # Added weight decay
     scheduler = CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-5)    
-    scaler = GradScaler()
+    
+    # Check if we can use automatic mixed precision
+    use_amp = torch.cuda.is_available() and hasattr(torch.cuda.amp, 'autocast') and hasattr(torch.cuda.amp, 'GradScaler')
+    scaler = torch.cuda.amp.GradScaler() if use_amp else None
+    autocast = torch.cuda.amp.autocast if use_amp else lambda: nullcontext()
+    
     best_val_loss = float('inf')
     patience = 15
     patience_counter = 0
@@ -106,7 +118,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
             video = batch['video'].to(device)
             condition = batch['condition'].to(device)
 
-            if torch.cuda.is_available():
+            if use_amp:
                 with autocast():
                     recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                     
@@ -122,6 +134,12 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
 
                     # Final Loss Calculation
                     loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
+
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                scaler.step(optimizer)
+                scaler.update()
             else:
                 recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
                 recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
@@ -129,10 +147,11 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
                 z_g = torch.normal(0, 1, size=z_v.shape).to(device)
                 lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
                 loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
+                
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
 
-            # Backpropagation
-            scaler.scale(loss).backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             # === Add gradient monitoring here ===
             total_grad_norm = 0.0
             max_grad = -float('inf')
@@ -150,8 +169,6 @@ def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.
             if i % 10 == 0:
                 logging.info(f"  Grad Norm: {total_grad_norm:.4f} | Max Grad: {max_grad:.4f} | Min Grad: {min_grad:.4f}")
             # === End of gradient monitoring ===
-            scaler.step(optimizer)
-            scaler.update()
 
             epoch_loss += loss.item()
 
