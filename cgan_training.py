@@ -81,7 +81,12 @@ def calculate_diversity_score(generated_samples):
             pairwise_distances.append(dist)
     diversity_score = np.mean(pairwise_distances)
     return diversity_score
-
+def create_mask(real_skeleton_batch):
+    
+    mask = tf.reduce_sum(tf.abs(real_skeleton_batch), axis=-1) > 0  
+    mask = tf.cast(mask, FP_PRECISION)  
+    return mask  
+    
 def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs=100, batch_size=32, patience=10):
 
     if not validate_data_shapes(word_vectors, skeleton_sequences):
@@ -108,37 +113,47 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
 
     @tf.function
     def train_step(word_vector_batch, real_skeleton_batch):
-        actual_batch_size = tf.shape(word_vector_batch)[0]
-        
-        noise = tf.random.normal([actual_batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
-        word_vector_batch = tf.cast(word_vector_batch, FP_PRECISION)
-        generator_input = tf.concat([word_vector_batch, noise], axis=1)
+    actual_batch_size = tf.shape(word_vector_batch)[0]
 
-        with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
-            generated_skeleton = generator(generator_input, training=True)
+    noise = tf.random.normal([actual_batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
+    word_vector_batch = tf.cast(word_vector_batch, FP_PRECISION)
+    generator_input = tf.concat([word_vector_batch, noise], axis=1)
 
-            real_skeleton_batch = tf.cast(real_skeleton_batch, FP_PRECISION)
-            generated_skeleton = tf.cast(generated_skeleton, FP_PRECISION)
+    with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+        generated_skeleton = generator(generator_input, training=True)
 
-            word_vector_expanded = tf.reshape(word_vector_batch, (actual_batch_size, 1, 1, 50))
-            word_vector_expanded = tf.tile(word_vector_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])
+        real_skeleton_batch = tf.cast(real_skeleton_batch, FP_PRECISION)
+        generated_skeleton = tf.cast(generated_skeleton, FP_PRECISION)
 
-            real_input = tf.concat([real_skeleton_batch, word_vector_expanded], axis=-1)
-            fake_input = tf.concat([generated_skeleton, word_vector_expanded], axis=-1)
+        mask = create_mask(real_skeleton_batch)  
+        mask = tf.reduce_mean(mask, axis=1, keepdims=True)
 
-            real_output = discriminator(real_input, training=True)
-            fake_output = discriminator(fake_input, training=True)
+  
+        word_vector_expanded = tf.reshape(word_vector_batch, (actual_batch_size, 1, 1, 50))
+        word_vector_expanded = tf.tile(word_vector_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])
 
-            gen_loss = cross_entropy(tf.ones_like(fake_output), fake_output)
-            disc_loss = discriminator_loss(real_output, fake_output)
+        real_input = tf.concat([real_skeleton_batch, word_vector_expanded], axis=-1)
+        fake_input = tf.concat([generated_skeleton, word_vector_expanded], axis=-1)
 
-        generator_gradients = gen_tape.gradient(gen_loss, generator.trainable_variables)
-        discriminator_gradients = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
+        real_output = discriminator(real_input, training=True)
+        fake_output = discriminator(fake_input, training=True)
 
-        generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
-        discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
+    
+        gen_loss = cross_entropy(tf.ones_like(fake_output), fake_output)
+        disc_loss = discriminator_loss(real_output, fake_output)
 
-        return gen_loss, disc_loss
+    
+        gen_loss = tf.reduce_sum(gen_loss * mask) / tf.reduce_sum(mask)
+        disc_loss = tf.reduce_sum(disc_loss * mask) / tf.reduce_sum(mask)
+
+    generator_gradients = gen_tape.gradient(gen_loss, generator.trainable_variables)
+    discriminator_gradients = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
+
+    generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
+    discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
+
+    return gen_loss, disc_loss
+
     
     # Function to get model weights
     def get_model_weights(model):
