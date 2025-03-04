@@ -99,7 +99,6 @@ class LandmarkDataset(Dataset):
     def _process_file_batch(self, file_paths):
         for file_path in file_paths:
             try:
-                # Use memory mapping for large files
                 video_dict = {}  # Cache to avoid duplicate processing
                 
                 with open(file_path, "rb") as f:
@@ -110,9 +109,8 @@ class LandmarkDataset(Dataset):
                                 if gloss not in self.vocab:
                                     self.vocab[gloss] = len(self.vocab)
                                 
-                                # Use a subset cap per gloss to balance dataset
-                                max_videos = min(5, MAX_SAMPLES_PER_BATCH // len(item))
-                                for video in videos[:max_videos]:
+                                # Remove the hard limit on videos per gloss
+                                for video in videos:
                                     # Convert once then reuse
                                     video_hash = hash(str(video))
                                     if video_hash not in video_dict:
@@ -126,8 +124,7 @@ class LandmarkDataset(Dataset):
                                     else:
                                         padded_video = video_dict[video_hash]
                                         
-                                    # Add to dataset
-                                    self.data.append((padded_video, gloss))
+                                    # Add to dataset only once
                                     self.data.append((padded_video, gloss))
                         except Exception as e:
                             logging.error(f"Error processing line in {file_path}: {e}")
@@ -135,6 +132,7 @@ class LandmarkDataset(Dataset):
                 logging.info(f"Completed reading from {file_path}")
             except Exception as e:
                 logging.error(f"Error opening file {file_path}: {e}")
+
     
     def _pad_video(self, video):
         # Pre-allocate array for better performance
