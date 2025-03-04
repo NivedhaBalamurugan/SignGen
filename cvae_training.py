@@ -108,6 +108,7 @@ class LandmarkDataset(Dataset):
                                         
                                     # Add to dataset
                                     self.data.append((padded_video, gloss))
+                                    self.data.append((padded_video, gloss))
                         except Exception as e:
                             logging.error(f"Error processing line in {file_path}: {e}")
                             continue
