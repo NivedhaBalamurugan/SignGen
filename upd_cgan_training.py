@@ -6,14 +6,12 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 from config import *
-from utils.data_utils import load_skeleton_sequences, prepare_training_data
+from utils.data_utils import load_skeleton_sequences, load_word_embeddings, prepare_training_data
 from utils.validation_utils import validate_data_shapes, validate_config
 from utils.model_utils import save_model_and_history, log_model_summary, log_training_config
 from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import build_generator, build_discriminator
 from scipy.stats import entropy
-
-setup_logging("cgan_training")
 
 FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000
@@ -313,7 +311,7 @@ def main():
     os.makedirs(os.path.dirname(CGAN_GEN_PATH), exist_ok=True)
     os.makedirs(os.path.dirname(CGAN_DIS_PATH), exist_ok=True)
 
-    word_embeddings = WORD_EMBEDDINGS
+    word_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
     if not word_embeddings or not validate_word_embeddings(word_embeddings, CGAN_NOISE_DIM):
         return
 
@@ -384,4 +382,5 @@ def main():
 
 
 if __name__ == "__main__":
+    setup_logging("upd_cgan_training")
     main()
