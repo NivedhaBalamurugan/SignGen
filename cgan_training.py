@@ -41,6 +41,29 @@ def process_file_batch(files, word_embeddings):
 
     return sequences, vectors
 
+
+def load_word_embeddings(filepath):
+
+        
+    if not os.path.exists(filepath):
+        logging.error(f"Word embeddings file not found: {filepath}")
+        return None
+        
+    word_embeddings = {}
+    try:
+        with open(filepath, encoding="utf8") as file:
+            for line in file:
+                values = line.split()
+                word = values[0]
+                vector = np.asarray(values[1:], dtype=FP_PRECISION)
+                word_embeddings[word] = vector
+        logging.info(f"Loaded {len(word_embeddings)} word embeddings")
+        return word_embeddings
+    except Exception as e:
+        logging.error(f"Error loading word embeddings: {e}")
+        return None
+
+
 def process_data_batches(jsonl_files, word_embeddings):
     total_sequences = []
     total_vectors = []
@@ -271,7 +294,7 @@ def main():
     os.makedirs(os.path.dirname(CGAN_GEN_PATH), exist_ok=True)
     os.makedirs(os.path.dirname(CGAN_DIS_PATH), exist_ok=True)
 
-    word_embeddings = WORD_EMBEDDINGS
+    word_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
     if not word_embeddings or not validate_word_embeddings(word_embeddings, CGAN_NOISE_DIM):
         return
 

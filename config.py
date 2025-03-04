@@ -94,42 +94,14 @@ IN_CHANNELS = 3
 NUM_NODES = 49
 HIDDEN_DIM = 128
 
-# Global variable to store embeddings
-_WORD_EMBEDDINGS = None
-
-def load_word_embeddings(filepath):
-    """Lazy loading of word embeddings using singleton pattern"""
-    global _WORD_EMBEDDINGS
-    
-    if _WORD_EMBEDDINGS is not None:
-        return _WORD_EMBEDDINGS
-        
-    if not os.path.exists(filepath):
-        logging.error(f"Word embeddings file not found: {filepath}")
-        return None
-        
-    word_embeddings = {}
-    try:
-        with open(filepath, encoding="utf8") as file:
-            for line in file:
-                values = line.split()
-                word = values[0]
-                vector = np.asarray(values[1:], dtype=FP_PRECISION)
-                word_embeddings[word] = vector
-        logging.info(f"Loaded {len(word_embeddings)} word embeddings")
-        _WORD_EMBEDDINGS = word_embeddings
-        return _WORD_EMBEDDINGS
-    except Exception as e:
-        logging.error(f"Error loading word embeddings: {e}")
-        return None
 
 #Glove parameters
 EMBEDDING_DIM = 50
 
-def get_word_embeddings():
-    return load_word_embeddings(GLOVE_TXT_PATH)
+# def get_word_embeddings():
+#     return load_word_embeddings(GLOVE_TXT_PATH)
 
-WORD_EMBEDDINGS = get_word_embeddings()
+# WORD_EMBEDDINGS = get_word_embeddings()
 
 
 def setup_logging(model):
