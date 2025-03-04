@@ -8,8 +8,10 @@ import psutil
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch import optim
-from architectures.cvae import ConditionalVAE, kl_divergence_loss, latent_classification_loss
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+import torch.nn.functional as F
+from architectures.cvae import ConditionalVAE, improved_kl_divergence_loss, adaptive_reconstruction_loss, adaptive_latent_classification_loss
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+import torch.nn.functional as F
 from torch.optim import AdamW
 import torch.cuda.amp as amp
 from utils.data_utils import load_word_embeddings
@@ -105,6 +107,7 @@ class LandmarkDataset(Dataset):
                                         
                                     # Add to dataset only once
                                     self.data.append((padded_video, gloss))
+                                    self.data.append((padded_video, gloss))
                         except Exception as e:
                             logging.error(f"Error processing line in {file_path}: {e}")
                             continue
@@ -144,25 +147,27 @@ class LandmarkDataset(Dataset):
 
 
 
-def train(model, train_loader, val_loader, device, num_epochs, lr=0.001, beta_start=0.1, beta_max=4.0, lambda_lc=0.01):
+def train(model, train_loader, val_loader, device, num_epochs=100, lr=1e-3, beta_start=0.1, beta_max=4.0, lambda_lc=0.01):
     logging.info("Starting training...")
-    model.train()
     
     # Use AdamW with a slightly higher learning rate
-    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
+    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=1e-4, betas=(0.9,0.999))
     
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5) 
-    # Setup automatic mixed precision - always use if available
+    scheduler = CosineAnnealingWarmRestarts(
+        optimizer, 
+        T_0=10,  # Initial restart period
+        T_mult=2,  # Multiplicative factor for restart
+        eta_min=1e-5  # Minimum learning rate
+    )
+        # Setup automatic mixed precision - always use if available
     use_amp = torch.cuda.is_available() and hasattr(torch.cuda.amp, 'autocast') and hasattr(torch.cuda.amp, 'GradScaler')
     scaler = amp.GradScaler() if use_amp else None
     autocast = amp.autocast if use_amp else lambda: nullcontext()
     
     best_val_loss = float('inf')
-    patience = 10  # Reduced from 15
+    max_patience = 15  # Reduced from 15
     patience_counter = 0
-    warmup_epochs = 20  # KL warmup period
-    # Pre-allocate tensors for optimization
-    z_g = None
+    
     
     # Compile model if using PyTorch 2.0+
     if hasattr(torch, 'compile') and torch.cuda.is_available():
@@ -175,20 +180,17 @@ def train(model, train_loader, val_loader, device, num_epochs, lr=0.001, beta_st
     for epoch in range(num_epochs):
         logging.info(f"\nEpoch {epoch+1}/{num_epochs}...")
         epoch_loss = 0.0
-        epoch_recon_loss = 0.0
-        epoch_kl_loss = 0.0
-        epoch_lc_loss = 0.0
         
-        if epoch < warmup_epochs:
-            beta = beta_start * (epoch / warmup_epochs)  # Gradually increase beta
+        if epoch < 20:
+            beta = beta_start * (epoch / 20)
         else:
-            beta = beta_max
-
-        if epoch < 10:  # Warmup for 10 epoch
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr * ((epoch + 1) / 10)
+            beta = min(beta_max, beta_start + (beta_max - beta_start) * (epoch - 20) / (num_epochs - 20))
         
         model.train()
+        total_train_loss = 0
+        total_recon_loss = 0
+        total_kl_loss = 0
+        total_lc_loss = 0
         
         # Use tqdm for progress bar
         with tqdm(total=len(train_loader), desc=f"Epoch {epoch+1}/{num_epochs}") as pbar:
@@ -201,22 +203,18 @@ def train(model, train_loader, val_loader, device, num_epochs, lr=0.001, beta_st
                 video = batch['video'].to(device, non_blocking=True)
                 condition = batch['condition'].to(device, non_blocking=True)
 
-                batch_size = video.size(0)
+                # batch_size = video.size(0)
                 
                 if use_amp:
                     with autocast():
                         recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
-                        recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(batch_size, MAX_FRAMES, -1))
-                        kl_loss = kl_divergence_loss(mu, logvar).mean() + 1e-4
                         
-                        # Reuse z_g tensor if possible
-                        if z_g is None or z_g.size(0) != batch_size:
-                            z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                        else:
-                            z_g.normal_(0, 1)
+                        z_g = torch.randn_like(z_v)
                             
-                        lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
-                        loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
+                        recon_loss = adaptive_reconstruction_loss(recon_video, video)
+                        kl_loss = improved_kl_divergence_loss(mu, logvar, beta)
+                        lc_loss = adaptive_latent_classification_loss(z_v, z_g, model.latent_classifier)
+                        loss = recon_loss + kl_loss + lambda_lc * lc_loss
 
                     scaler.scale(loss).backward()
                     scaler.unscale_(optimizer)
@@ -225,93 +223,92 @@ def train(model, train_loader, val_loader, device, num_epochs, lr=0.001, beta_st
                     scaler.update()
                 else:
                     recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
-                    recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(batch_size, MAX_FRAMES, -1))
-                    kl_loss = kl_divergence_loss(mu, logvar).mean() + 1e-4
                     
-                    if z_g is None or z_g.size(0) != batch_size:
-                        z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                    else:
-                        z_g.normal_(0, 1)
+                    z_g = torch.randn_like(z_v)
                         
-                    lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
-                    loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
+                    recon_loss = adaptive_reconstruction_loss(recon_video, video)
+                    kl_loss = improved_kl_divergence_loss(mu, logvar, beta)
+                    lc_loss = adaptive_latent_classification_loss(z_v, z_g, model.latent_classifier)
+                    loss = recon_loss + kl_loss + lambda_lc * lc_loss
                     
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                     optimizer.step()
 
-                epoch_loss += loss.item()
-                epoch_recon_loss += recon_loss.item()
-                epoch_kl_loss += kl_loss.item()
-                epoch_lc_loss += lc_loss.item()
+                total_train_loss += loss.item()
+                total_recon_loss += recon_loss.item()
+                total_kl_loss += kl_loss.item()
+                total_lc_loss += lc_loss.item()
 
+                pbar.update(1)
                 # Update progress bar
                 pbar.set_postfix({
                     'loss': f'{loss.item():.4f}',
                     'recon': f'{recon_loss.item():.4f}',
                     'kl': f'{kl_loss.item():.4f}'
                 })
-                pbar.update(1)
+                
 
-        avg_train_loss = epoch_loss / len(train_loader)
-        avg_recon_loss = epoch_recon_loss / len(train_loader)
-        avg_kl_loss = epoch_kl_loss / len(train_loader)
-        avg_lc_loss = epoch_lc_loss / len(train_loader)
+            scheduler.step()
+                
+        # Validation
+        total_val_loss = 0.0
+        model.eval()
         
-        logging.info(f"Epoch {epoch+1} completed. Avg Train Loss: {avg_train_loss:.6f} Avg Recon Loss: {avg_recon_loss:.6f} Avg KL Loss: {avg_kl_loss:.6f} Avg Latent Class Loss: {avg_lc_loss:.6f}")
-        
-        # Only evaluate periodically to save time
-        if (epoch + 1) % EVAL_FREQUENCY == 0 or epoch == 0 or epoch == num_epochs - 1:
-            # Validation
-            val_loss = 0.0
-            model.eval()
-            
-            # Use torch.no_grad for validation (faster)
-            with torch.no_grad():
-                for batch in tqdm(val_loader, desc="Validation"):
-                    video = batch['video'].to(device, non_blocking=True)
-                    condition = batch['condition'].to(device, non_blocking=True)
-                    
-                    batch_size = video.size(0)
-                    
-                    # Even in evaluation, we can use autocast for speed
-                    if use_amp:
-                        with autocast():
-                            recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
-                            z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                            recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(batch_size, MAX_FRAMES, -1))
-                            kl_loss = kl_divergence_loss(mu, logvar).mean() + 1e-4
-                            lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
-                            loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
-                    else:
+        # Use torch.no_grad for validation (faster)
+        with torch.no_grad():
+            for batch in tqdm(val_loader, desc="Validation"):
+                video = batch['video'].to(device, non_blocking=True)
+                condition = batch['condition'].to(device, non_blocking=True)
+                
+                # batch_size = video.size(0)
+                
+                # Even in evaluation, we can use autocast for speed
+                if use_amp:
+                    with autocast():
                         recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
-                        z_g = torch.normal(0, 1, size=z_v.shape).to(device)
-                        recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(batch_size, MAX_FRAMES, -1))
-                        kl_loss = kl_divergence_loss(mu, logvar).mean()
-                        lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
-                        loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
+                        z_g = torch.randn_like(z_v)
+                        recon_loss = adaptive_reconstruction_loss(recon_video, video)
+                        kl_loss = improved_kl_divergence_loss(mu, logvar, beta)
+                        lc_loss = adaptive_latent_classification_loss(z_v, z_g, model.latent_classifier)
                         
-                    val_loss += loss.item()
+                        val_loss = recon_loss + kl_loss + lambda_lc * lc_loss
+                        total_val_loss += val_loss.item()
+                else:
+                    recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
+                    z_g = torch.randn_like(z_v)
+                    recon_loss = adaptive_reconstruction_loss(recon_video, video)
+                    kl_loss = improved_kl_divergence_loss(mu, logvar, beta)
+                    lc_loss = adaptive_latent_classification_loss(z_v, z_g, model.latent_classifier)
+                    
+                    val_loss = recon_loss + kl_loss + lambda_lc * lc_loss
+                    total_val_loss += val_loss.item()
+                    
 
-            avg_val_loss = val_loss / len(val_loader)
-            logging.info(f"Validation Loss: {avg_val_loss:.6f} | Beta: {beta:.6f}")
-            
-            # Save model and check early stopping
-            if avg_val_loss < best_val_loss:
-                best_val_loss = avg_val_loss
-                patience_counter = 0
-                model_save_path = os.path.join(CVAE_MODEL_PATH, "cvae.pth")
-                torch.save(model.state_dict(), model_save_path)
-                logging.info(f"Model saved to {model_save_path}")
-            else:
-                patience_counter += 1
-                if patience_counter >= patience:
-                    logging.info("Early stopping triggered.")
-                    break
+        avg_train_loss = total_train_loss / len(train_loader)
+        avg_recon_loss = total_recon_loss / len(train_loader)
+        avg_kl_loss = total_kl_loss / len(train_loader)
+        avg_lc_loss = total_lc_loss / len(train_loader)
+        avg_val_loss = total_val_loss / len(val_loader)
         
-        # Pass validation loss to the scheduler
-        scheduler.step(avg_val_loss)  # <-- Fix: Pass avg_val_loss here
-        logging.info(f"Learning Rate: {scheduler.optimizer.param_groups[0]['lr']}")
+        logging.info(f"Epoch {epoch+1}: Train Loss {avg_train_loss:.8f}")
+        logginf.info(f"Recon loss {avg_recon_loss:.8f} , Kl loss {avg_kl_loss:.8f} , LC loss {avg_lc_loss:.8f}")
+        logging.info(f"Val Loss {avg_val_loss:.8f} , Beta {beta:.8f}", )
+        
+        model_save_path = os.path.join(CVAE_MODEL_PATH, f"cvae{epoch+1}.pth")
+        torch.save(model.state_dict(), model_save_path)
+        logging.info(f"Model saved to {model_save_path}")
+        
+        # Save model and check early stopping
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+        
+        if patience_counter >= max_patience:
+            logging.info("Early stopping triggered.")
+            break
         
         # Force garbage collection
         if epoch % 2 == 0:  # Less frequent GC
@@ -420,7 +417,7 @@ def main():
     logging.info("Model initialized. Starting training...")
 
     # Train the model with a slightly higher learning rate
-    train(model, train_loader, val_loader, device, num_epochs=80, lr=0.001)
+    train(model, train_loader, val_loader, device, num_epochs=100, lr=1e-3)
 
     logging.info("Training completed. Running final evaluation...")
     
