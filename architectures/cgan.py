@@ -3,36 +3,30 @@ from keras.models import Sequential
 from keras.layers import GRU, Dense, Input, RepeatVector, Reshape
 from config import *
 
-def build_generator() -> tf.keras.Model:
-    """Build and return the CGAN generator model.
-    
-    Returns:
-        tf.keras.Model: A sequential model for generating skeleton sequences
-    """
-    model = Sequential([
-        Input(shape=(50 + CGAN_NOISE_DIM,)),
-        RepeatVector(MAX_FRAMES),
-        GRU(128, return_sequences=True),
-        GRU(64, return_sequences=True),
-        Dense(NUM_JOINTS * NUM_COORDINATES, activation='linear'),
-        Reshape((MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES))
-    ])
-    return model
+def build_generator():
+    inputs = tf.keras.Input(shape=(CGAN_NOISE_DIM + 50,))  # Noise + word embeddings
+    x = tf.keras.layers.Dense(128, activation="relu")(inputs)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.Dropout(0.3)(x)
+    x = tf.keras.layers.Dense(256, activation="relu")(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.Dropout(0.3)(x)
+    outputs = tf.keras.layers.Dense(MAX_FRAMES * NUM_JOINTS * 3, activation="tanh")(x)  # Output skeleton
+    outputs = tf.reshape(outputs, (-1, MAX_FRAMES, NUM_JOINTS, 3))
+    return tf.keras.Model(inputs, outputs)
 
-def build_discriminator() -> tf.keras.Model:
-    """Build and return the CGAN discriminator model.
-    
-    Returns:
-        tf.keras.Model: A sequential model for discriminating real/fake sequences
-    """
-    model = tf.keras.Sequential([
-        tf.keras.layers.Input(shape=(MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES + 50)),
-        tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(128, activation='relu'),
-        tf.keras.layers.Dense(64, activation='relu'),
-        tf.keras.layers.Dense(1, activation='sigmoid')
-    ])
-    return model
+def build_discriminator():
+    input_shape = (MAX_FRAMES, NUM_JOINTS, 53)  # 3 (skeleton) + 50 (word embeddings)
+    inputs = tf.keras.Input(shape=input_shape)
+    x = tf.keras.layers.Flatten()(inputs)
+    x = tf.keras.layers.Dense(128, activation="relu")(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.Dropout(0.3)(x)
+    x = tf.keras.layers.Dense(64, activation="relu")(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.Dropout(0.3)(x)
+    outputs = tf.keras.layers.Dense(1)(x)  # No activation for Wasserstein Loss
+    return tf.keras.Model(inputs, outputs)
 
 def discriminator_loss(real_output: tf.Tensor, fake_output: tf.Tensor) -> tf.Tensor:
     """Calculate the discriminator loss.
