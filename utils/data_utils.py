@@ -3,6 +3,26 @@ import json
 import numpy as np
 from config import *
 
+def load_word_embeddings(filepath):    
+        
+    if not os.path.exists(filepath):
+        logging.error(f"Word embeddings file not found: {filepath}")
+        return None
+        
+    word_embeddings = {}
+    try:
+        with open(filepath, encoding="utf8") as file:
+            for line in file:
+                values = line.split()
+                word = values[0]
+                vector = np.asarray(values[1:], dtype=FP_PRECISION)
+                word_embeddings[word] = vector
+        logging.info(f"Loaded {len(word_embeddings)} word embeddings")
+        return word_embeddings
+    except Exception as e:
+        logging.error(f"Error loading word embeddings: {e}")
+        return None
+
 def load_skeleton_sequences(filepaths):
     skeleton_data = {}
     

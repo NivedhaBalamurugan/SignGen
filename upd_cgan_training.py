@@ -6,14 +6,12 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 from config import *
-from utils.data_utils import load_skeleton_sequences, prepare_training_data
+from utils.data_utils import load_skeleton_sequences, load_word_embeddings, prepare_training_data
 from utils.validation_utils import validate_data_shapes, validate_config
 from utils.model_utils import save_model_and_history, log_model_summary, log_training_config
 from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import build_generator, build_discriminator
 from scipy.stats import entropy
-
-setup_logging("cgan_training")
 
 FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000
@@ -102,7 +100,8 @@ def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors
 
     with tf.GradientTape() as tape:
         tape.watch(interpolated)
-        pred = discriminator([interpolated, word_vectors], training=True)
+        discriminator_input = tf.concat([interpolated, word_vectors], axis=-1)
+        pred = discriminator(discriminator_input, training=True)    
 
     gradients = tape.gradient(pred, [interpolated])[0]
     gradients_norm = tf.sqrt(tf.reduce_sum(
@@ -139,8 +138,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     def train_step(word_vector_batch, real_skeleton_batch):
         actual_batch_size = tf.shape(word_vector_batch)[0]
 
-        noise = tf.random.normal(
-            [actual_batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
+        noise = tf.random.normal([actual_batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
         word_vector_batch = tf.cast(word_vector_batch, FP_PRECISION)
         generator_input = tf.concat([word_vector_batch, noise], axis=1)
 
@@ -150,42 +148,36 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             real_skeleton_batch = tf.cast(real_skeleton_batch, FP_PRECISION)
             generated_skeleton = tf.cast(generated_skeleton, FP_PRECISION)
 
-            mask = create_mask(real_skeleton_batch)
+            mask = create_mask(real_skeleton_batch)  
             mask = tf.reduce_mean(mask, axis=1, keepdims=True)
 
-            word_vector_expanded = tf.reshape(
-                word_vector_batch, (actual_batch_size, 1, 1, 50))
-            word_vector_expanded = tf.tile(
-                word_vector_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])
+            word_vector_expanded = tf.reshape(word_vector_batch, (actual_batch_size, 1, 1, 50))
+            word_vector_expanded = tf.tile(word_vector_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])
 
-            real_input = tf.concat(
-                [real_skeleton_batch, word_vector_expanded], axis=-1)
-            fake_input = tf.concat(
-                [generated_skeleton, word_vector_expanded], axis=-1)
+            
+            real_input = tf.concat([real_skeleton_batch, word_vector_expanded], axis=-1)
+            fake_input = tf.concat([generated_skeleton, word_vector_expanded], axis=-1)
 
+          
             real_output = discriminator(real_input, training=True)
             fake_output = discriminator(fake_input, training=True)
 
-            gen_loss = -tf.reduce_mean(fake_output)
-            disc_loss = tf.reduce_mean(
-                fake_output) - tf.reduce_mean(real_output)
+            
+            gen_loss = -tf.reduce_mean(fake_output)  
+            disc_loss = tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)  
 
-            gp = gradient_penalty(
-                discriminator, real_skeleton_batch, generated_skeleton, word_vector_expanded)
-            disc_loss += 10.0 * gp
+            
+            gp = gradient_penalty(discriminator, real_skeleton_batch, generated_skeleton, word_vector_expanded)
+            disc_loss += 10.0 * gp  
 
             gen_loss = tf.reduce_sum(gen_loss * mask) / tf.reduce_sum(mask)
             disc_loss = tf.reduce_sum(disc_loss * mask) / tf.reduce_sum(mask)
 
-        generator_gradients = gen_tape.gradient(
-            gen_loss, generator.trainable_variables)
-        discriminator_gradients = disc_tape.gradient(
-            disc_loss, discriminator.trainable_variables)
+        generator_gradients = gen_tape.gradient(gen_loss, generator.trainable_variables)
+        discriminator_gradients = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
 
-        generator_optimizer.apply_gradients(
-            zip(generator_gradients, generator.trainable_variables))
-        discriminator_optimizer.apply_gradients(
-            zip(discriminator_gradients, discriminator.trainable_variables))
+        generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
+        discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
 
         return gen_loss, disc_loss
 
@@ -319,7 +311,7 @@ def main():
     os.makedirs(os.path.dirname(CGAN_GEN_PATH), exist_ok=True)
     os.makedirs(os.path.dirname(CGAN_DIS_PATH), exist_ok=True)
 
-    word_embeddings = WORD_EMBEDDINGS
+    word_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
     if not word_embeddings or not validate_word_embeddings(word_embeddings, CGAN_NOISE_DIM):
         return
 
@@ -390,4 +382,5 @@ def main():
 
 
 if __name__ == "__main__":
+    setup_logging("upd_cgan_training")
     main()

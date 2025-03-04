@@ -5,16 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import show_output
 from config import *
-
-def load_word_embeddings(filepath):
-    word_embeddings = {}
-    with open(filepath, encoding="utf8") as file:
-        for line in file:
-            values = line.split()
-            word = values[0]
-            vector = np.asarray(values[1:], dtype='float32')
-            word_embeddings[word] = vector
-    return word_embeddings
+from utils.data_utils import load_word_embeddings
 
 
 NOISE_DIM = 50

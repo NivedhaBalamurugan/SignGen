@@ -12,6 +12,7 @@ from architectures.cvae import ConditionalVAE, kl_divergence_loss, latent_classi
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.optim import AdamW
 import torch.cuda.amp as amp
+from utils.data_utils import load_word_embeddings
 from utils.glove_utils import validate_word_embeddings
 from utils.validation_utils import validate_data_shapes, validate_config
 from config import *
@@ -19,7 +20,6 @@ import warnings
 from tqdm import tqdm
 from functools import lru_cache
 
-setup_logging("cvae_training")
 
 # Constants for batch processing
 FILES_PER_BATCH = 1
@@ -46,27 +46,6 @@ def check_memory():
         torch.cuda.empty_cache() if torch.cuda.is_available() else None
         return True
     return False
-
-def load_word_embeddings(filepath):    
-        
-    if not os.path.exists(filepath):
-        logging.error(f"Word embeddings file not found: {filepath}")
-        return None
-        
-    word_embeddings = {}
-    try:
-        with open(filepath, encoding="utf8") as file:
-            for line in file:
-                values = line.split()
-                word = values[0]
-                vector = np.asarray(values[1:], dtype=FP_PRECISION)
-                word_embeddings[word] = vector
-        logging.info(f"Loaded {len(word_embeddings)} word embeddings")
-        return word_embeddings
-    except Exception as e:
-        logging.error(f"Error loading word embeddings: {e}")
-        return None
-
 
 class LandmarkDataset(Dataset):
     def __init__(self, file_paths, transform=None):
@@ -452,4 +431,5 @@ def main():
     evaluate_model(model, val_loader, device)
 
 if __name__ == "__main__":
+    setup_logging("cvae_training")
     main()

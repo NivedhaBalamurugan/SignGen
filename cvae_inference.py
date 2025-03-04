@@ -6,6 +6,7 @@ import warnings
 from architectures.cvae import ConditionalVAE
 from config import *
 import show_output
+from utils.data_utils import load_word_embeddings
 
 warnings.filterwarnings("ignore")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -70,7 +71,7 @@ def evaluate_model(model, dataloader, device):
 
 def generate_sequence(asl_word, model):
     model.eval()
-    embedding_matrix = WORD_EMBEDDINGS
+    embedding_matrix = load_word_embeddings(GLOVE_TXT_PATH)
     cond_vector = embedding_matrix.get(asl_word, np.zeros(EMBEDDING_DIM))
     cond_vector = torch.tensor(cond_vector, dtype=torch.float32).to(device)
     
