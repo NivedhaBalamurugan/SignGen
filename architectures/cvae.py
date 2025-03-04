@@ -24,15 +24,31 @@ class Encoder(nn.Module):
         self.dropout = nn.Dropout(p=dropout_prob)
 
     def forward(self, x):
-        B, T, _, _ = x.size()
-        x = x.view(B, T, -1)
+        B, T, _, _ = x.size()  # Input shape: (B, T, 49, 3)
+        x = x.view(B, T, -1)   # Reshape to (B, T, 49*3)
 
-        mask = (x.sum(dim=2) != 0).float()
+        # Compute mask:
+        x_joints = x.view(B, T, 49, 3)  # Reshape to (B, T, 49, 3)
+        
+        # Check if palm joints are present
+        palm_joint_1 = x_joints[:, :, 7, :] 
+        palm_joint_2 = x_joints[:, :, 28, :] 
+        palm_joints_present = (palm_joint_1.sum(dim=-1) != 0) & (palm_joint_2.sum(dim=-1) != 0)  # (B, T)
+
+        # Check if the frame is not fully padded (at least one joint is non-zero)
+        frame_not_padded = (x_joints.sum(dim=(2, 3))) != 0  # (B, T)
+
+        # Combine conditions: frame is valid if palm joints are present AND frame is not padded
+        mask = (palm_joints_present & frame_not_padded).float()  # (B, T)
+
+        # LSTM forward pass
         outputs, (h_n, _) = self.lstm(x)
         outputs = self.dropout(outputs)
 
+        # Apply attention with the custom mask
         context, attn_weights = self.attention(outputs, mask)
 
+        # Compute latent variables
         mu = self.fc_mu(torch.cat([outputs.mean(dim=1), context], dim=-1))
         logvar = self.fc_logvar(torch.cat([outputs.mean(dim=1), context], dim=-1))
 
