@@ -13,7 +13,6 @@ from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import build_generator, build_discriminator
 from scipy.stats import entropy
 
-setup_logging("cgan_training")
 
 FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000
@@ -390,4 +389,5 @@ def main():
 
 
 if __name__ == "__main__":
+    setup_logging("cgan_training")
     main()

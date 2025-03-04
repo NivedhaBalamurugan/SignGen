@@ -19,7 +19,6 @@ import warnings
 from tqdm import tqdm
 from functools import lru_cache
 
-setup_logging("cvae_training")
 
 # Constants for batch processing
 FILES_PER_BATCH = 1
@@ -454,4 +453,5 @@ def main():
     evaluate_model(model, val_loader, device)
 
 if __name__ == "__main__":
+    setup_logging("cvae_training")
     main()
