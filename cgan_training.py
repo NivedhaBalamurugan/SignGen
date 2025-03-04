@@ -72,7 +72,8 @@ def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors
 
     with tf.GradientTape() as tape:
         tape.watch(interpolated)
-        pred = discriminator([interpolated, word_vectors], training=True)
+        interpolated = tf.concat([interpolated, word_vectors], axis=-1)
+        pred = discriminator(interpolated, training=True)
 
     gradients = tape.gradient(pred, [interpolated])[0]
     gradients_norm = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]))
@@ -335,8 +336,7 @@ def main():
         return
 
     # Normalize skeleton sequences to the range [0, 1] or [-1, 1]
-    all_skeleton_sequences = (all_skeleton_sequences - np.min(all_skeleton_sequences)) / (
-    np.max(all_skeleton_sequences) - np.min(all_skeleton_sequences))
+    all_skeleton_sequences = np.array(total_sequences)
     all_word_vectors = np.array(total_vectors)
 
     del total_sequences, total_vectors, word_embeddings
