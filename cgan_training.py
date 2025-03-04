@@ -60,28 +60,27 @@ def process_data_batches(jsonl_files, word_embeddings):
 
     return total_sequences, total_vectors
 def discriminator_loss(real_output, fake_output):
-    loss = tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)
-    return tf.clip_by_value(loss, -1e2, 1e2)  # Clip extreme values to avoid NaN
-
+    return tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)
 
 def generator_loss(fake_output):
-    loss = -tf.reduce_mean(fake_output)
-    return tf.clip_by_value(loss, -1e2, 1e2)  # Clip extreme values
+    return -tf.reduce_mean(fake_output)  # Clip extreme values
 
 
 def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors):
-    batch_size = tf.shape(real_skeletons)[0]
+    batch_size = 64
     epsilon = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
     interpolated = epsilon * real_skeletons + (1 - epsilon) * fake_skeletons
-    interpolated = tf.cast(interpolated, dtype=FP_PRECISION)
+
+    # Concatenate interpolated and word_vectors
     word_vectors_expanded = tf.reshape(word_vectors, (batch_size, 1, 1, -1))
     word_vectors_expanded = tf.tile(word_vectors_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])
-    with tf.GradientTape() as tape:
-        tape.watch(interpolated)
-        interpolated = tf.concat([interpolated, word_vectors], axis=-1)
-        pred = discriminator(interpolated, training=True)
+    discriminator_input = tf.concat([interpolated, word_vectors_expanded], axis=-1)
 
-    gradients = tape.gradient(pred, [interpolated])[0]
+    with tf.GradientTape() as tape:
+        tape.watch(discriminator_input)
+        pred = discriminator(discriminator_input, training=True)
+
+    gradients = tape.gradient(pred, [discriminator_input])[0]
     gradients_norm = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]) + 1e-8)
     gradient_penalty = tf.reduce_mean((gradients_norm - 1.0) ** 2)
     return gradient_penalty
@@ -116,8 +115,8 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     if not validate_data_shapes(word_vectors, skeleton_sequences):
         return False
 
-    generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.00005, beta_1=0.5, beta_2=0.9)
-    discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.00002, beta_1=0.5, beta_2=0.9)
+    generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5, beta_2=0.9)
+    discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5, beta_2=0.9)
 
 
     total_gen_loss = 0.0
