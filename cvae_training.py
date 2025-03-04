@@ -292,7 +292,7 @@ def train(model, train_loader, val_loader, device, num_epochs=100, lr=1e-3, beta
         avg_val_loss = total_val_loss / len(val_loader)
         
         logging.info(f"Epoch {epoch+1}: Train Loss {avg_train_loss:.8f}")
-        logginf.info(f"Recon loss {avg_recon_loss:.8f} , Kl loss {avg_kl_loss:.8f} , LC loss {avg_lc_loss:.8f}")
+        logging.info(f"Recon loss {avg_recon_loss:.8f} , Kl loss {avg_kl_loss:.8f} , LC loss {avg_lc_loss:.8f}")
         logging.info(f"Val Loss {avg_val_loss:.8f} , Beta {beta:.8f}", )
         
         model_save_path = os.path.join(CVAE_MODEL_PATH, f"cvae{epoch+1}.pth")
