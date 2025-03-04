@@ -59,7 +59,25 @@ def process_data_batches(jsonl_files, word_embeddings):
             pbar.update(1)
 
     return total_sequences, total_vectors
+def discriminator_loss(real_output, fake_output):
+    return tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)
 
+def generator_loss(fake_output):
+    return -tf.reduce_mean(fake_output)
+
+def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors):
+    batch_size = tf.shape(real_skeletons)[0]
+    epsilon = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
+    interpolated = epsilon * real_skeletons + (1 - epsilon) * fake_skeletons
+
+    with tf.GradientTape() as tape:
+        tape.watch(interpolated)
+        pred = discriminator([interpolated, word_vectors], training=True)
+
+    gradients = tape.gradient(pred, [interpolated])[0]
+    gradients_norm = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]))
+    gradient_penalty = tf.reduce_mean((gradients_norm - 1.0) ** 2)
+    return gradient_penalty
 def calculate_pkd(real_skeletons, generated_skeletons):
     distances = np.linalg.norm(real_skeletons - generated_skeletons, axis=-1)
     avg_distance = np.mean(distances)
@@ -91,8 +109,8 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     if not validate_data_shapes(word_vectors, skeleton_sequences):
         return False
 
-    generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
-    discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001)
+    generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.00015, beta_1=0.5, beta_2=0.9)
+    discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.00005, beta_1=0.5, beta_2=0.9)
 
     total_gen_loss = 0.0
     total_disc_loss = 0.0
@@ -127,7 +145,6 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             mask = create_mask(real_skeleton_batch)  
             mask = tf.reduce_mean(mask, axis=1, keepdims=True)
 
-    
             word_vector_expanded = tf.reshape(word_vector_batch, (actual_batch_size, 1, 1, 50))
             word_vector_expanded = tf.tile(word_vector_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])
 
@@ -137,11 +154,14 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             real_output = discriminator(real_input, training=True)
             fake_output = discriminator(fake_input, training=True)
 
-        
-            gen_loss = cross_entropy(tf.ones_like(fake_output), fake_output)
+            # Wasserstein Loss
+            gen_loss = generator_loss(fake_output)
             disc_loss = discriminator_loss(real_output, fake_output)
 
-        
+            # Gradient Penalty
+            gp = gradient_penalty(discriminator, real_skeleton_batch, generated_skeleton, word_vector_expanded)
+            disc_loss += 10.0 * gp  # Weight for gradient penalty
+
             gen_loss = tf.reduce_sum(gen_loss * mask) / tf.reduce_sum(mask)
             disc_loss = tf.reduce_sum(disc_loss * mask) / tf.reduce_sum(mask)
 
@@ -314,7 +334,9 @@ def main():
         logging.error("No valid sequences loaded")
         return
 
-    all_skeleton_sequences = np.array(total_sequences)
+    # Normalize skeleton sequences to the range [0, 1] or [-1, 1]
+    all_skeleton_sequences = (all_skeleton_sequences - np.min(all_skeleton_sequences)) / (
+    np.max(all_skeleton_sequences) - np.min(all_skeleton_sequences))
     all_word_vectors = np.array(total_vectors)
 
     del total_sequences, total_vectors, word_embeddings
@@ -329,8 +351,8 @@ def main():
 
     try:
         success, history = train_gan(generator, discriminator,
-                                     all_word_vectors, all_skeleton_sequences,
-                                     epochs=CGAN_EPOCHS, batch_size=CGAN_BATCH_SIZE)
+                             all_word_vectors, all_skeleton_sequences,
+                             epochs=CGAN_EPOCHS, batch_size=CGAN_BATCH_SIZE, patience=20)
 
         if success:
             save_model_and_history(CGAN_GEN_PATH, generator, history)
