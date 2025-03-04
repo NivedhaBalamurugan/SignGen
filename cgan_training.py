@@ -42,8 +42,6 @@ def process_file_batch(files, word_embeddings):
 
 
 def load_word_embeddings(filepath):
-
-        
     if not os.path.exists(filepath):
         logging.error(f"Word embeddings file not found: {filepath}")
         return None
