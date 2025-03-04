@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 from config import *
-from utils.data_utils import load_skeleton_sequences, prepare_training_data
+from utils.data_utils import load_skeleton_sequences, load_word_embeddings, prepare_training_data
 from utils.validation_utils import validate_data_shapes, validate_config
 from utils.model_utils import save_model_and_history, log_model_summary, log_training_config
 from utils.glove_utils import validate_word_embeddings
@@ -39,27 +39,6 @@ def process_file_batch(files, word_embeddings):
     gc.collect()
 
     return sequences, vectors
-
-
-def load_word_embeddings(filepath):
-    if not os.path.exists(filepath):
-        logging.error(f"Word embeddings file not found: {filepath}")
-        return None
-        
-    word_embeddings = {}
-    try:
-        with open(filepath, encoding="utf8") as file:
-            for line in file:
-                values = line.split()
-                word = values[0]
-                vector = np.asarray(values[1:], dtype=FP_PRECISION)
-                word_embeddings[word] = vector
-        logging.info(f"Loaded {len(word_embeddings)} word embeddings")
-        return word_embeddings
-    except Exception as e:
-        logging.error(f"Error loading word embeddings: {e}")
-        return None
-
 
 def process_data_batches(jsonl_files, word_embeddings):
     total_sequences = []

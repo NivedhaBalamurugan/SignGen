@@ -98,12 +98,6 @@ HIDDEN_DIM = 128
 #Glove parameters
 EMBEDDING_DIM = 50
 
-# def get_word_embeddings():
-#     return load_word_embeddings(GLOVE_TXT_PATH)
-
-# WORD_EMBEDDINGS = get_word_embeddings()
-
-
 def setup_logging(model):
     from datetime import datetime
     
