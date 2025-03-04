@@ -135,7 +135,7 @@ WORD_EMBEDDINGS = get_word_embeddings()
 def setup_logging(model):
     from datetime import datetime
     
-    log_dir = os.path.join(BASE_PATH, "logs")
+    log_dir = os.path.join(BASE_PATH, "Logs")
     os.makedirs(log_dir, exist_ok=True)
     
     # Add timestamp to log filename

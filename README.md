@@ -19,3 +19,32 @@ Project folder structure
 | | └── WLASL_v0.3.json
 │ ├── Models/
 ```
+
+Landmark Structure
+
+```json
+{
+    "<gloss_1>" : [
+        <video1>[
+            <frame1>[
+                <landmark1>[x,y,z],
+                <landmark2>[x,y,z],
+                ...
+                <landmark49>[x,y,z],
+            ],
+            <frame2>[],
+            <frame3>[],
+            ...
+        ],
+        <video2>[],
+        <video3>[],
+        ...
+    ],
+    "<gloss_2>" : [
+        <video1>[],
+        <video2>[],
+        ...
+    ],
+    ...
+}
+```
