@@ -9,7 +9,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torch import optim
 from architectures.cvae import ConditionalVAE, kl_divergence_loss, latent_classification_loss
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.optim import AdamW
 import torch.cuda.amp as amp
 from utils.glove_utils import validate_word_embeddings
@@ -18,7 +18,6 @@ from config import *
 import warnings
 from tqdm import tqdm
 from functools import lru_cache
-from torch.utils.tensorboard import SummaryWriter
 
 setup_logging("cvae_training")
 
@@ -152,8 +151,8 @@ def train(model, train_loader, val_loader, device, num_epochs, lr=0.001, beta_st
     model.train()
     
     # Use AdamW with a slightly higher learning rate
-    optimizer = Adam(model.parameters(), lr=2e-4, betas=(0.5, 0.9))
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
+    optimizer = AdamW(model.parameters(), lr=2e-4, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
 
     # Setup automatic mixed precision - always use if available
     use_amp = torch.cuda.is_available() and hasattr(torch.cuda.amp, 'autocast') and hasattr(torch.cuda.amp, 'GradScaler')
@@ -163,7 +162,6 @@ def train(model, train_loader, val_loader, device, num_epochs, lr=0.001, beta_st
     best_val_loss = float('inf')
     patience = 10  # Reduced from 15
     patience_counter = 0
-    warmup_epochs = 20  
     warmup_epochs = 40  # Extended from 20
     # Pre-allocate tensors for optimization
     z_g = None
@@ -224,7 +222,7 @@ def train(model, train_loader, val_loader, device, num_epochs, lr=0.001, beta_st
 
                     scaler.scale(loss).backward()
                     scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
                     scaler.step(optimizer)
                     scaler.update()
                 else:

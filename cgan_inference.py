@@ -4,6 +4,7 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 import show_output
+from config import *
 
 def load_word_embeddings(filepath):
     word_embeddings = {}
@@ -21,8 +22,8 @@ MAX_FRAMES = 233
 NUM_JOINTS = 49
 NUM_COORDINATES = 3
 
-generator = tf.keras.models.load_model("Dataset/Gen.keras")
-word_embeddings = load_word_embeddings("glove.6B.50d.txt")
+generator = tf.keras.models.load_model("Dataset/cgan_generator.keras")
+word_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
 
 
 def generate_skeleton_sequence(word):
@@ -38,24 +39,6 @@ def generate_skeleton_sequence(word):
     generated_skeleton = generator(generator_input, training=False).numpy()
     return generated_skeleton.squeeze()
 
-
-def visualize_skeleton(sequence):
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    for frame in range(0, sequence.shape[0], max(1, sequence.shape[0] // 10)):
-        ax.clear()
-        joints = sequence[frame]
-        x, y, z = joints[:, 0], joints[:, 1], joints[:, 2]
-        ax.scatter(x, y, z, c='r', marker='o')
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        ax.set_title(f'Frame {frame}')
-        plt.pause(0.1)
-
-    plt.show()
-
 def get_cgan_sequence(word, isSave_Video):
 
     generated_sequence = generate_skeleton_sequence(word)
@@ -70,3 +53,6 @@ def get_cgan_sequence(word, isSave_Video):
         if isSave_Video:
             show_output.save_generated_sequence(generated_sequence, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO) 
     return generated_sequence
+
+if __name__ == "__main__":
+    get_cgan_sequence("afternoon",1)

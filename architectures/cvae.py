@@ -62,7 +62,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.seq_len = seq_len
         self.fc = nn.Linear(latent_dim + cond_dim, latent_dim + cond_dim)
-        self.lstm = nn.LSTM(latent_dim + cond_dim, hidden_dim, batch_first=True, num_layers=1)
+        self.lstm = nn.LSTM(latent_dim + cond_dim, hidden_dim, batch_first=True, num_layers=2)
         self.fc_out = nn.Linear(hidden_dim, output_dim)
         self.dropout = nn.Dropout(p=dropout_prob)
 

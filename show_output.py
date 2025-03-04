@@ -5,7 +5,7 @@ import logging
 from config import *
 
 def plot_a_frame(J, filename):
-    J = np.array(J) #.reshape(49,3)
+    J = np.array(J).reshape(49,3)
     if np.all(J == 0):
         return  # Skip entirely blank frames
 

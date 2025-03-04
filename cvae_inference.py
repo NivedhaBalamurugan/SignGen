@@ -104,13 +104,13 @@ def get_cvae_sequence(asl_word, isSave_Video=False):
     
     # input_shape = [(CVAE_BATCH_SIZE, MAX_FRAMES, CVAE_INPUT_DIM, 1), (CAVE_BATCH_SIZE, EMBEDDING_DIM)]    
     # summary(model, input_size=input_shape, depth=4, col_names=["input_size", "output_size", "num_params", "trainable"])
-   # generated_skeleton = generate_sequence(asl_word, model)
-   # logging.info(f"Generated sequence shape: {generated_skeleton.shape}")
+    generated_skeleton = generate_sequence(asl_word, model)
+    logging.info(f"Generated sequence shape: {generated_skeleton.shape}")
     
-    #if isSave_Video:
-     #   show_output.save_generated_sequence(generated_skeleton, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO) 
+    if isSave_Video:
+        show_output.save_generated_sequence(generated_skeleton, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO) 
     
     return generated_skeleton
 
 if __name__ == "__main__":
-    get_cvae_sequence("anatomy",1)
+    get_cvae_sequence("afternoon",1)
