@@ -147,12 +147,11 @@ class LandmarkDataset(Dataset):
 
 
 
-def train(model, train_loader, val_loader, device, num_epochs=100, lr=1e-3, beta_start=0.1, beta_max=4.0, lambda_lc=0.01):
+def train(model, train_loader, val_loader, device, num_epochs=100, lr=1e-3, beta_start=0.1, beta_max=1.0, lambda_lc=0):
     logging.info("Starting training...")
     
     # Use AdamW with a slightly higher learning rate
-    optimizer = AdamW(model.parameters(), lr=lr, weight_decay=1e-4, betas=(0.9,0.999))
-    
+    optimizer = AdamW(model.parameters(), lr=3e-4, weight_decay=1e-4)      
     scheduler = CosineAnnealingWarmRestarts(
         optimizer, 
         T_0=10,  # Initial restart period
@@ -180,11 +179,12 @@ def train(model, train_loader, val_loader, device, num_epochs=100, lr=1e-3, beta
     for epoch in range(num_epochs):
         logging.info(f"\nEpoch {epoch+1}/{num_epochs}...")
         epoch_loss = 0.0
-        
-        if epoch < 20:
-            beta = beta_start * (epoch / 20)
+        warmup_epochs = 50 
+        if epoch < warmup_epochs:
+            beta = beta_start * (epoch / warmup_epochs)
         else:
-            beta = min(beta_max, beta_start + (beta_max - beta_start) * (epoch - 20) / (num_epochs - 20))
+            beta = beta_max
+
         
         model.train()
         total_train_loss = 0

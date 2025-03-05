@@ -83,7 +83,7 @@ def generate_sequence(asl_word, model):
     return generated_sequence.squeeze(0).cpu().numpy()
 
 def get_cvae_sequence(asl_word, isSave_Video=False):
-    model_path = os.path.join(CVAE_MODEL_PATH, "cvae.pth")
+    model_path = os.path.join(CVAE_MODEL_PATH, "cvae16.pth")
     if not os.path.exists(model_path):
         logging.error("Trained model file not found.")
         return None
