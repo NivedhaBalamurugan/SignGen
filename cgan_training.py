@@ -117,6 +117,26 @@ def create_mask(real_skeleton_batch):
     mask = tf.reduce_sum(tf.abs(real_skeleton_batch), axis=-1) > 0  
     mask = tf.cast(mask, FP_PRECISION)  
     return mask  
+
+def save_model_checkpoint(generator, discriminator, history, epoch, loss):
+    """Save model checkpoint with epoch number"""
+    checkpoint_dir = os.path.join(os.path.dirname(CGAN_GEN_PATH), f"checkpoints")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    
+    # Save generator
+    gen_path = os.path.join(checkpoint_dir, f"generator_epoch{epoch}_loss{loss:.4f}.keras")
+    generator.save(gen_path)
+    
+    # Save discriminator 
+    disc_path = os.path.join(checkpoint_dir, f"discriminator_epoch{epoch}_loss{loss:.4f}.keras")
+    discriminator.save(disc_path)
+    
+    # Save history
+    history_path = os.path.join(checkpoint_dir, f"history_epoch{epoch}.npy")
+    np.save(history_path, history)
+    
+    logging.info(f"Saved checkpoint for epoch {epoch} with loss {loss:.4f}")
+    return gen_path, disc_path
     
 def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs=100, batch_size=32, patience=10):
 
@@ -287,12 +307,28 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                      f"Disc Loss: {epoch_disc_loss_value:.4f}, "
                      f"Combined Loss: {combined_loss:.4f}")
         
-        # Check for improvement for early stopping
+        # Save checkpoint if loss improved
         if combined_loss < best_loss:
             logging.info(f"Loss improved from {best_loss:.4f} to {combined_loss:.4f}")
             best_loss = combined_loss
             patience_counter = 0
-            # Save the best model weights
+            
+            # Save checkpoint
+            current_history = {
+                'total_gen_loss': total_gen_loss,
+                'total_disc_loss': total_disc_loss,
+                'epoch': epoch + 1,
+                'best_loss': best_loss
+            }
+            gen_path, disc_path = save_model_checkpoint(
+                generator, 
+                discriminator, 
+                current_history,
+                epoch + 1,
+                combined_loss
+            )
+            
+            # Keep best weights in memory
             best_generator_weights = get_model_weights(generator)
             best_discriminator_weights = get_model_weights(discriminator)
         else:
@@ -301,7 +337,6 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             
             if patience_counter >= patience:
                 logging.info(f"Early stopping triggered at epoch {epoch+1}")
-                # Restore best weights
                 if best_generator_weights is not None and best_discriminator_weights is not None:
                     logging.info("Restoring best model weights")
                     set_model_weights(generator, best_generator_weights)
