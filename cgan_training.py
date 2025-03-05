@@ -80,7 +80,7 @@ def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors
         tape.watch(discriminator_input)
         pred = discriminator(discriminator_input, training=True)
 
-    gradients = tape.gradient(pred, [discriminator_input])[0]
+    gradients = tape.gradient(pred, discriminator_input)
     gradients_norm = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]) + 1e-8)
     gradient_penalty = tf.reduce_mean((gradients_norm - 1.0) ** 2)
     return gradient_penalty
@@ -137,7 +137,8 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
 
     @tf.function
     def train_step(word_vector_batch, real_skeleton_batch):
-        actual_batch_size = tf.shape(word_vector_batch)[0]
+        actual_batch_size = tf.shape(word_vector_batch)[0].numpy()  
+
 
         noise = tf.random.normal([actual_batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
         word_vector_batch = tf.cast(word_vector_batch, FP_PRECISION)
