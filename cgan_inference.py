@@ -2,22 +2,22 @@ import os
 import json
 import tensorflow as tf
 import numpy as np
-import matplotlib.pyplot as plt
 import show_output
 from config import *
 from utils.data_utils import load_word_embeddings
 
+INPUT_WORD = "before"
 
 NOISE_DIM = 50
 MAX_FRAMES = 233
 NUM_JOINTS = 49
 NUM_COORDINATES = 3
 
-generator = tf.keras.models.load_model("Dataset/cgan_generator.keras")
-word_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
+generator = tf.keras.models.load_model(CGAN_GEN_PATH)
 
 
 def generate_skeleton_sequence(word):
+    word_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
     if word not in word_embeddings:
         print(f"Word '{word}' not found in embeddings.")
         return None
@@ -31,11 +31,10 @@ def generate_skeleton_sequence(word):
     return generated_skeleton.squeeze()
 
 def get_cgan_sequence(word, isSave_Video):
-
     generated_sequence = generate_skeleton_sequence(word)
     if generated_sequence is not None:
         print(f"Generated Skeleton Shape for '{word}': {generated_sequence.shape}")
-        save_path = "Dataset"
+        save_path = OUTPUTS_PATH
         os.makedirs(save_path, exist_ok=True)
         json_filepath = os.path.join(save_path, f"generated_skeleton_{word}.json")
         with open(json_filepath, 'w') as json_file:
@@ -46,4 +45,4 @@ def get_cgan_sequence(word, isSave_Video):
     return generated_sequence
 
 if __name__ == "__main__":
-    get_cgan_sequence("afternoon",1)
+    get_cgan_sequence(INPUT_WORD,1)
