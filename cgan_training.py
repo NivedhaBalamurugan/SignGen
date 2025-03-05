@@ -66,24 +66,32 @@ def generator_loss(fake_output):
     return -tf.reduce_mean(fake_output)  # Clip extreme values
 
 
-def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors):
-    batch_size = 64
+def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors_expanded):
+    """Calculate gradient penalty for WGAN-GP"""
+    batch_size = tf.shape(real_skeletons)[0]
+    
+    # Generate random epsilon for interpolation
     epsilon = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
+    
+    # Expand dimensions to match skeleton shape
+    epsilon = tf.tile(epsilon, [1, MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES])
+    
+    # Interpolate between real and fake samples
     interpolated = epsilon * real_skeletons + (1 - epsilon) * fake_skeletons
-
-    # Concatenate interpolated and word_vectors
-    word_vectors_expanded = tf.reshape(word_vectors, (batch_size, 1, 1, -1))
-    word_vectors_expanded = tf.tile(word_vectors_expanded, [1, MAX_FRAMES, NUM_JOINTS, 1])
+    
+    # Use already expanded word vectors directly
     discriminator_input = tf.concat([interpolated, word_vectors_expanded], axis=-1)
-
+    
     with tf.GradientTape() as tape:
         tape.watch(discriminator_input)
         pred = discriminator(discriminator_input, training=True)
-
+    
     gradients = tape.gradient(pred, discriminator_input)
     gradients_norm = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]) + 1e-8)
     gradient_penalty = tf.reduce_mean((gradients_norm - 1.0) ** 2)
+    
     return gradient_penalty
+
 def calculate_pkd(real_skeletons, generated_skeletons):
     distances = np.linalg.norm(real_skeletons - generated_skeletons, axis=-1)
     avg_distance = np.mean(distances)
@@ -137,7 +145,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
 
     @tf.function
     def train_step(word_vector_batch, real_skeleton_batch):
-        actual_batch_size = tf.shape(word_vector_batch)[0].numpy()  
+        actual_batch_size = tf.shape(word_vector_batch)[0]
 
 
         noise = tf.random.normal([actual_batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
