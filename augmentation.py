@@ -69,3 +69,66 @@ def augment_skeleton_sequence(frame_landmarks, shear_params, trans_params, scale
     scaling = scale_landmarks(landmarks, scale_params)
     
     return shearing, translation, scaling
+
+def combine_shear_scale(landmarks, shear_params, scale_params):
+    """Apply shearing followed by scaling"""
+    landmarks = shear_landmarks(landmarks, shear_params)
+    landmarks = scale_landmarks(landmarks, scale_params)
+    return truncate(landmarks, DECIMAL_PRECISION)
+
+def combine_shear_translate(landmarks, shear_params, trans_params):
+    """Apply shearing followed by translation"""
+    landmarks = shear_landmarks(landmarks, shear_params)
+    landmarks = translate_landmarks(landmarks, trans_params)
+    return truncate(landmarks, DECIMAL_PRECISION)
+
+def combine_scale_translate(landmarks, scale_params, trans_params):
+    """Apply scaling followed by translation"""
+    landmarks = scale_landmarks(landmarks, scale_params)
+    landmarks = translate_landmarks(landmarks, trans_params)
+    return truncate(landmarks, DECIMAL_PRECISION)
+
+def combine_all(landmarks, shear_params, scale_params, trans_params):
+    """Apply all augmentations in sequence"""
+    landmarks = shear_landmarks(landmarks, shear_params)
+    landmarks = scale_landmarks(landmarks, scale_params)
+    landmarks = translate_landmarks(landmarks, trans_params)
+    return truncate(landmarks, DECIMAL_PRECISION)
+
+def augment_skeleton_sequence_combined(landmarks, shear_params, trans_params, scale_params):
+    """Apply augmentations to landmarks using pre-generated parameters"""
+    landmarks = np.array(landmarks, dtype=FP_PRECISION)
+    
+    augmented_versions = {
+        # Individual augmentations
+        'original': landmarks,
+        'shear': shear_landmarks(landmarks, shear_params),
+        'translate': translate_landmarks(landmarks, trans_params),
+        'scale': scale_landmarks(landmarks, scale_params),
+        
+        # Combined augmentations
+        'shear_scale': combine_shear_scale(landmarks, shear_params, scale_params),
+        'shear_translate': combine_shear_translate(landmarks, shear_params, trans_params),
+        'scale_translate': combine_scale_translate(landmarks, scale_params, trans_params),
+        'all_combined': combine_all(landmarks, shear_params, scale_params, trans_params),
+        'random_combine': random_combine(landmarks, shear_params, scale_params, trans_params),
+    }
+    
+    return augmented_versions
+
+def random_combine(landmarks, shear_params, scale_params, trans_params, p=0.5):
+    """Randomly combine augmentations with probability p using given parameters"""
+    landmarks = np.array(landmarks, dtype=FP_PRECISION)
+    
+    apply_shear = np.random.random() < p
+    apply_scale = np.random.random() < p
+    apply_translate = np.random.random() < p
+    
+    if apply_shear:
+        landmarks = shear_landmarks(landmarks, shear_params)
+    if apply_scale:
+        landmarks = scale_landmarks(landmarks, scale_params)
+    if apply_translate:
+        landmarks = translate_landmarks(landmarks, trans_params)
+        
+    return truncate(landmarks, DECIMAL_PRECISION)
