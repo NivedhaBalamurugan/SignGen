@@ -20,21 +20,21 @@ def build_generator():
 
 def build_discriminator():
     input_shape = (30, 49, 53)  # Fixed to 30 frames, 49 joints, and 53 features (3 + 50)
-    inputs = tf.keras.Input(shape=input_shape)
+    inputs = Input(shape=input_shape)
     
     # Flatten the input
-    x = tf.keras.layers.Flatten()(inputs)
+    x = Flatten()(inputs)
     
     # Add dense layers
-    x = tf.keras.layers.Dense(128, activation="relu")(x)
-    x = tf.keras.layers.Dropout(0.3)(x)
-    x = tf.keras.layers.Dense(64, activation="relu")(x)
-    x = tf.keras.layers.Dropout(0.3)(x)
+    x = Dense(128, activation="relu")(x)
+    x = Dropout(0.3)(x)
+    x = Dense(64, activation="relu")(x)
+    x = Dropout(0.3)(x)
     
     # Output layer
-    outputs = tf.keras.layers.Dense(1)(x)  # No activation for Wasserstein Loss
+    outputs = Dense(1)(x)  # No activation for Wasserstein Loss
     
-    return tf.keras.Model(inputs, outputs)
+    return Model(inputs, outputs)
 
 def discriminator_loss(real_output: tf.Tensor, fake_output: tf.Tensor) -> tf.Tensor:
     """Calculate the discriminator loss for Wasserstein GAN."""
