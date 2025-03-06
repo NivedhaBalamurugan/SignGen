@@ -100,3 +100,67 @@ def denormalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
     denormalized[:, 1] = denormalized[:, 1] * FRAME_HEIGHT
     
     return denormalized
+
+
+import numpy as np
+from scipy.spatial.distance import cdist
+
+def select_sign_frames(original_frames):
+    """
+    Select 30 frames from sign language video with:
+    - Valid upper body and hand joints
+    - Significant hand motion
+    
+    :param original_frames: List of numpy arrays (shape: (49,3))
+    :return: Selected frames (list of numpy arrays)
+    """
+    
+    # 1. Filter valid frames
+    valid_frames = []
+    valid_indices = []
+    
+    for idx, frame in enumerate(original_frames):
+        # Split joints
+        upper = frame[:7]       # 0-6: Upper body
+        hand1 = frame[7:28]     # 7-27: Hand 1
+        hand2 = frame[28:49]    # 28-48: Hand 2
+        
+        # Check upper body (all joints must be present)
+        if np.any(np.all(upper == 0, axis=1)):
+            continue
+            
+        # Check hand validity
+        hand1_zero = np.sum(np.all(hand1 == 0, axis=1)) 
+        hand2_zero = np.sum(np.all(hand2 == 0, axis=1))
+        
+        if (hand1_zero > 10 or hand2_zero > 10 or 
+            np.all(hand1 == 0) or np.all(hand2 == 0)):
+            continue
+            
+        valid_frames.append(frame)
+        valid_indices.append(idx)
+
+    # 2. Early exit if insufficient frames
+    if len(valid_frames) <= 30:
+        return valid_frames[:30]
+    
+    # 3. Motion scoring (focus on hand trajectories)
+    motion_scores = np.zeros(len(valid_frames))
+    hand_joints = list(range(7, 49))  # All hand joints
+    
+    prev_hands = None
+    for i, frame in enumerate(valid_frames):
+        current_hands = frame[hand_joints]
+        
+        if prev_hands is not None:
+            # Calculate per-joint movement magnitude
+            dists = np.linalg.norm(current_hands - prev_hands, axis=1)
+            motion_scores[i] = np.sum(dists)
+            
+        prev_hands = current_hands
+
+    # 4. Select frames with highest motion scores
+    selected_indices = np.argsort(motion_scores)[-30:]
+    selected_indices = np.sort(selected_indices)  # Maintain temporal order
+    
+    return [valid_frames[i] for i in selected_indices]

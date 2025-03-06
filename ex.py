@@ -2,6 +2,8 @@ import json
 import numpy as np  # Ensure NumPy is imported
 import show_output
 from config import *
+from utils.data_utils import select_sign_frames
+
 
 def read_jsonl_file(file_path):
     data = {}
@@ -29,6 +31,7 @@ video_data = get_video(data, 'afternoon')
 if video_data is not None:
     aug_video = np.array(video_data)  # Convert only if video_data is not None
     print("Second video for 'afternoon':", aug_video.shape)
-    show_output.save_generated_sequence(aug_video, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
+    key_frames = select_sign_frames(aug_video)
+    show_output.save_generated_sequence(key_frames, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
 else:
     print("Key 'afternoon' not found or does not have at least two videos.")

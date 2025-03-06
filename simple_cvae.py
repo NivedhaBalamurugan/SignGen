@@ -19,13 +19,39 @@ from config import *
 from utils.data_utils import load_word_embeddings
 
 # Hyperparameters
-batch_size = 100
+batch_size = 32
 learning_rate = 1e-3
 max_epoch = 100
 load_epoch = -1
 generate = True
 NUM_CLASSES = 30  # Number of sign language classes
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+FILES_PER_BATCH = 1
+MAX_SAMPLES_PER_BATCH = 1000
+MEMORY_THRESHOLD = 85
+EVAL_FREQUENCY = 10
+PREFETCH_FACTOR = 2
+
+
+class nullcontext:
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+warnings.filterwarnings("ignore")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def check_memory():
+    memory_percent = psutil.Process().memory_percent()
+    if memory_percent > MEMORY_THRESHOLD:
+        logging.warning(
+            f"Memory usage high ({memory_percent:.1f}%). Clearing memory...")
+        gc.collect()
+        torch.cuda.empty_cache() if torch.cuda.is_available() else None
+        return True
+    return False
 
 class SignLanguageModel(nn.Module):
     def __init__(self, 
@@ -44,7 +70,7 @@ class SignLanguageModel(nn.Module):
         # Encoder BiLSTM Layers
         self.bilstm = nn.LSTM(
             input_size=input_dim,  # 3D coordinates
-            hidden_size=128,  # Increased hidden size
+            hidden_size=64,  # Increased hidden size
             num_layers=2,  # Two-layer BiLSTM
             batch_first=True,
             bidirectional=True
@@ -52,48 +78,54 @@ class SignLanguageModel(nn.Module):
 
         # Fully connected layers after BiLSTM
         self.fc_encoder = nn.Sequential(
-            nn.Linear(128 * 2 * num_joints, 512),  # Doubled size to capture more features
-            nn.BatchNorm1d(512),
+            nn.Linear(64 * 2 * num_joints, 256),  # Doubled size to capture more features
+            nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Dropout(0.3)
         )
 
         # Latent space layers
-        self.mu = nn.Linear(512 + embedding_dim, latent_size)
-        self.logvar = nn.Linear(512 + embedding_dim, latent_size)
+        self.mu = nn.Linear(256 + embedding_dim, latent_size)
+        self.logvar = nn.Linear(256 + embedding_dim, latent_size)
 
         # Decoder Layers
         self.fc_decoder_input = nn.Sequential(
-            nn.Linear(latent_size + embedding_dim, 512),
-            nn.BatchNorm1d(512),
+            nn.Linear(latent_size + embedding_dim, 256),
+            nn.BatchNorm1d(256),
             nn.ReLU(),
             nn.Dropout(0.3)
         )
 
         self.fc_decoder_output = nn.Sequential(
-            nn.Linear(512, 128 * 2 * num_joints),
-            nn.BatchNorm1d(128 * 2 * num_joints),
+            nn.Linear(256, 64 * 2 * num_joints),
+            nn.BatchNorm1d(64 * 2 * num_joints),
             nn.ReLU()
         )
 
         # BiLSTM-like Decoder
         self.decoder_lstm = nn.LSTM(
             input_size=input_dim,
-            hidden_size=128,
+            hidden_size=64,
             num_layers=2,
             batch_first=True,
             bidirectional=True
         )
 
         # Final projection to original input dimension
-        self.output_proj = nn.Linear(128 * 2, input_dim)
+        self.output_proj = nn.Linear(64 * 2, input_dim)
 
     def encoder(self, x, condition):
         B, F, J, C = x.shape
         x_reshaped = x.view(B * J, F, C)
         
-        lstm_out, _ = self.bilstm(x_reshaped)
-        lstm_out = lstm_out.mean(dim=1)
+        # Process each joint separately to reduce memory usage
+        lstm_out_list = []
+        for joint_idx in range(x_reshaped.shape[0]):
+            single_joint = x_reshaped[joint_idx:joint_idx+1]
+            single_lstm_out, _ = self.bilstm(single_joint)
+            lstm_out_list.append(single_lstm_out.mean(dim=1))
+        
+        lstm_out = torch.stack(lstm_out_list)
         lstm_out = lstm_out.view(B, -1)
         
         fc_features = self.fc_encoder(lstm_out)
@@ -116,7 +148,7 @@ class SignLanguageModel(nn.Module):
         
         decoder_input = self.fc_decoder_input(z)
         decoder_features = self.fc_decoder_output(decoder_input)
-        decoder_features = decoder_features.view(B, self.num_joints, 128 * 2)
+        decoder_features = decoder_features.view(B, self.num_joints, 64 * 2)
         
         dummy_input = torch.zeros(B, self.num_frames, self.num_joints, 3).to(z.device)
         
@@ -139,6 +171,7 @@ class SignLanguageModel(nn.Module):
         z = torch.cat((z, condition), dim=1)
         pred = self.decoder(z)
         return pred, mu, logvar
+
 
 def plot(epoch, pred, condition, name='test_'):
     """
@@ -253,99 +286,105 @@ def generate_sequence(epoch, z, condition, model):
         plot(epoch, pred.cpu(), condition.cpu(), name='Eval_')
         print("Sequences Plotted")
 
+
+class SignLanguageDataset(torch.utils.data.Dataset):
+    def __init__(self, file_paths, transform=None):
+        self.data = []
+        self.vocab = {}
+        self.transform = transform
+        self.glove_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
+        
+        file_paths = sorted(glob.glob(file_paths))
+        if not file_paths:
+            logging.error(f"No files found matching pattern: {file_paths}")
+            return
+        
+        # Process files in parallel if possible
+        num_batches = -(-len(file_paths)//FILES_PER_BATCH)
+        with tqdm.tqdm(total=num_batches, desc="Processing files") as pbar:
+            for i in range(0, len(file_paths), FILES_PER_BATCH):
+                file_batch = file_paths[i:i + FILES_PER_BATCH]
+                self._process_file_batch(file_batch)
+                check_memory()
+                pbar.update(1)
+                        
+        logging.info(f"Dataset processing complete. Vocabulary size: {len(self.vocab)}, data size: {len(self.data)}")
+
+    
+    def _process_file_batch(self, file_paths):
+        for file_path in file_paths:
+            try:
+                video_dict = {}  # Cache to avoid duplicate processing
+                
+                with open(file_path, "rb") as f:
+                    for line in f:
+                        try:
+                            item = orjson.loads(line)  # orjson is faster than json
+                            for gloss, videos in item.items():
+                                if gloss not in self.vocab:
+                                    self.vocab[gloss] = len(self.vocab)
+                                
+                                # Remove the hard limit on videos per gloss
+                                for video in videos:
+                                    # Convert once then reuse
+                                    video_hash = hash(str(video))
+                                    if video_hash not in video_dict:
+                                        padded_video = self._pad_video(video)
+                                        try:
+                                            padded_video = np.array(padded_video, dtype=np.float32)
+                                            video_dict[video_hash] = padded_video
+                                        except Exception as e:
+                                            logging.error(f"Error converting video for gloss '{gloss}'")
+                                            continue
+                                    else:
+                                        padded_video = video_dict[video_hash]
+                                        
+                                    # Add to dataset only once
+                                    self.data.append((padded_video, gloss))
+                                    self.data.append((padded_video, gloss))
+                                    self.data.append((padded_video, gloss))
+                        except Exception as e:
+                            logging.error(f"Error processing line in {file_path}: {e}")
+                            continue
+                logging.info(f"Completed reading from {file_path}")
+            except Exception as e:
+                logging.error(f"Error opening file {file_path}: {e}")
+
+
+    def _pad_video(self, video):
+        num_existing_frames = len(video)
+        if num_existing_frames >= MAX_FRAMES:
+            return video[:MAX_FRAMES]
+        
+        padded_video = np.zeros((MAX_FRAMES, 49, 3), dtype=np.float32)
+        padded_video[:num_existing_frames] = np.array(video[:num_existing_frames])
+        return padded_video
+
+    def __len__(self):
+        return len(self.data)
+    
+    # Cache frequently accessed items
+    @lru_cache(maxsize=512)
+    def _get_cond_vector(self, gloss):
+        cond_vector = self.glove_embeddings.get(gloss, np.zeros(EMBEDDING_DIM))
+        return torch.tensor(cond_vector, dtype=torch.float32)
+    
+    def __getitem__(self, idx):
+        video, gloss = self.data[idx]
+        video_tensor = torch.tensor(video)
+        cond_vector = self._get_cond_vector(gloss)
+        
+        sample = {'video': video_tensor, 'condition': cond_vector}
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
+    
+
+
 def load_data():
     """
     Load sign language dataset
     """
-    class SignLanguageDataset(torch.utils.data.Dataset):
-        def __init__(self, file_paths, transform=None):
-            self.data = []
-            self.vocab = {}
-            self.transform = transform
-            self.glove_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
-            
-            file_paths = sorted(glob.glob(file_paths))
-            if not file_paths:
-                logging.error(f"No files found matching pattern: {file_paths}")
-                return
-            
-            # Process files in parallel if possible
-            num_batches = -(-len(file_paths)//FILES_PER_BATCH)
-            with tqdm(total=num_batches, desc="Processing files") as pbar:
-                for i in range(0, len(file_paths), FILES_PER_BATCH):
-                    file_batch = file_paths[i:i + FILES_PER_BATCH]
-                    self._process_file_batch(file_batch)
-                    check_memory()
-                    pbar.update(1)
-                          
-            logging.info(f"Dataset processing complete. Vocabulary size: {len(self.vocab)}, data size: {len(self.data)}")
-
-        
-        def _process_file_batch(self, file_paths):
-            for file_path in file_paths:
-                try:
-                    video_dict = {}  # Cache to avoid duplicate processing
-                    
-                    with open(file_path, "rb") as f:
-                        for line in f:
-                            try:
-                                item = orjson.loads(line)  # orjson is faster than json
-                                for gloss, videos in item.items():
-                                    if gloss not in self.vocab:
-                                        self.vocab[gloss] = len(self.vocab)
-                                    
-                                    # Remove the hard limit on videos per gloss
-                                    for video in videos:
-                                        # Convert once then reuse
-                                        video_hash = hash(str(video))
-                                        if video_hash not in video_dict:
-                                            padded_video = self._pad_video(video)
-                                            try:
-                                                padded_video = np.array(padded_video, dtype=np.float32)
-                                                video_dict[video_hash] = padded_video
-                                            except Exception as e:
-                                                logging.error(f"Error converting video for gloss '{gloss}'")
-                                                continue
-                                        else:
-                                            padded_video = video_dict[video_hash]
-                                            
-                                        # Add to dataset only once
-                                        self.data.append((padded_video, gloss))
-                                        self.data.append((padded_video, gloss))
-                            except Exception as e:
-                                logging.error(f"Error processing line in {file_path}: {e}")
-                                continue
-                    logging.info(f"Completed reading from {file_path}")
-                except Exception as e:
-                    logging.error(f"Error opening file {file_path}: {e}")
-
-
-        def _pad_video(self, video):
-            num_existing_frames = len(video)
-            if num_existing_frames >= MAX_FRAMES:
-                return video[:MAX_FRAMES]
-            
-            padded_video = np.zeros((MAX_FRAMES, 49, 3), dtype=np.float32)
-            padded_video[:num_existing_frames] = np.array(video[:num_existing_frames])
-            return padded_video
-
-        @lru_cache(maxsize=512)
-        def _get_cond_vector(self, gloss):
-            cond_vector = self.glove_embeddings.get(gloss, np.zeros(EMBEDDING_DIM))
-            return torch.tensor(cond_vector, dtype=torch.float32)
-
-        def __len__(self):
-            return len(self.data)
-
-        def __getitem__(self, idx):
-            item = self.data[idx]
-            video = torch.tensor(item['video'])
-            condition = self._get_cond_vector(item['gloss'])
-            
-            return {
-                'video': video, 
-                'condition': condition
-            }
 
     # Create dataset
     full_dataset = SignLanguageDataset(FINAL_JSONL_PATHS)
