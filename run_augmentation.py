@@ -5,8 +5,9 @@ from collections import defaultdict
 from augmentation import (generate_params, shear_landmarks, 
                         translate_landmarks, scale_landmarks)
 from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
-from utils.data_utils import (denormalize_landmarks, normalize_landmarks)
+from utils.data_utils import (denormalize_landmarks, normalize_landmarks, select_sign_frames)
 from config import *
+
 
 def save_chunk_statistics(stats, output_path):
     stats_path = output_path.replace('.jsonl.gz', '_stats.json')
@@ -40,6 +41,7 @@ def augment_and_save(input_path, output_path):
             }
 
             for video_idx, video in enumerate(videos, 1):
+                video = select_sign_frames(video)
                 augmented_data[word].append(video)
                 
                 shearing_video, translation_video, scaling_video = [], [], []

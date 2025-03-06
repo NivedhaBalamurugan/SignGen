@@ -70,7 +70,7 @@ CVAE_MODEL_PATH = os.path.join(MODELS_PATH, "cvae_model")
 STGCN_MODEL_PATH = os.path.join(MODELS_PATH, "stgcn_model")
 
 # Model parameters
-MAX_FRAMES = 233
+MAX_FRAMES = 50
 NUM_JOINTS = 49
 NUM_COORDINATES = 3
 

@@ -15,7 +15,7 @@ def read_jsonl_file(file_path):
 
 def get_video(data, key):
     if key in data and len(data[key]) >= 2:
-        return data[key][2]  # Get the second video (index 1)
+        return data[key][0]  # Get the second video (index 1)
     else:
         return None
 
@@ -26,11 +26,12 @@ file_path = 'Dataset/landmarks/final/0_aug_landmarks.jsonl'
 data = read_jsonl_file(file_path)
 
 # Get the second video for the key "afternoon"
-video_data = get_video(data, 'afternoon')
+video_data = get_video(data, 'after')
 
 if video_data is not None:
     aug_video = np.array(video_data)  # Convert only if video_data is not None
     print("Second video for 'afternoon':", aug_video.shape)
+    # print(aug_video[1])
     key_frames = select_sign_frames(aug_video)
     show_output.save_generated_sequence(key_frames, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
 else:

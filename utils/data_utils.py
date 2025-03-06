@@ -2,6 +2,8 @@ import os
 import json
 import numpy as np
 from config import *
+from scipy.spatial.distance import cdist
+
 
 def load_word_embeddings(filepath):    
         
@@ -102,24 +104,18 @@ def denormalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
     return denormalized
 
 
-import numpy as np
-from scipy.spatial.distance import cdist
 
 def select_sign_frames(original_frames):
-    """
-    Select 30 frames from sign language video with:
-    - Valid upper body and hand joints
-    - Significant hand motion
-    
-    :param original_frames: List of numpy arrays (shape: (49,3))
-    :return: Selected frames (list of numpy arrays)
-    """
     
     # 1. Filter valid frames
     valid_frames = []
     valid_indices = []
     
     for idx, frame in enumerate(original_frames):
+        # Check if any joint has all 3 coordinates as 0
+        if np.any(np.all(frame == 0, axis=1)):
+            continue
+            
         # Split joints
         upper = frame[:7]       # 0-6: Upper body
         hand1 = frame[7:28]     # 7-27: Hand 1
@@ -127,6 +123,10 @@ def select_sign_frames(original_frames):
         
         # Check upper body (all joints must be present)
         if np.any(np.all(upper == 0, axis=1)):
+            continue
+            
+        # Check palm index (index 0 in hand 1 or hand 2)
+        if np.all(hand1[0] == 0) or np.all(hand2[0] == 0):
             continue
             
         # Check hand validity
@@ -140,10 +140,10 @@ def select_sign_frames(original_frames):
         valid_frames.append(frame)
         valid_indices.append(idx)
 
-    # 2. Early exit if insufficient frames
-    if len(valid_frames) <= 30:
-        return valid_frames[:30]
-    
+    # 2. Early exit if no valid frames
+    if len(valid_frames) == 0:
+        raise ValueError("No valid frames found in the video.")
+
     # 3. Motion scoring (focus on hand trajectories)
     motion_scores = np.zeros(len(valid_frames))
     hand_joints = list(range(7, 49))  # All hand joints
@@ -163,4 +163,17 @@ def select_sign_frames(original_frames):
     selected_indices = np.argsort(motion_scores)[-30:]
     selected_indices = np.sort(selected_indices)  # Maintain temporal order
     
-    return [valid_frames[i] for i in selected_indices]
+    selected_frames = [valid_frames[i] for i in selected_indices]
+
+    # 5. If fewer than 30 frames, uniformly repeat frames to make it 30
+    if len(selected_frames) < 30:
+        num_frames_needed = 30 - len(selected_frames)
+        repeat_indices = np.linspace(0, len(selected_frames) - 1, num_frames_needed, dtype=int)
+        repeated_frames = [selected_frames[i] for i in repeat_indices]
+        selected_frames.extend(repeated_frames)
+        
+        # Sort the final list to preserve temporal order
+        selected_frames = [selected_frames[i] for i in np.argsort(np.concatenate([selected_indices, repeat_indices]))]
+
+    return selected_frames[:30]  # Ensure exactly 30 frames
+
