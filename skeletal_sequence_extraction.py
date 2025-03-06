@@ -38,8 +38,8 @@ def normalize_landmarks(landmarks, frame_width, frame_height):
 
 
 def get_frame_landmarks(frame):
-    palm_landmarks = np.zeros((42, 3), dtype=FP_PRECISION)
-    body_landmarks = np.zeros((7, 3), dtype=FP_PRECISION)
+    palm_landmarks = np.zeros((42, 2), dtype=FP_PRECISION)
+    body_landmarks = np.zeros((7, 2), dtype=FP_PRECISION)
 
     results_hands = hands.process(frame)
     if results_hands.multi_hand_landmarks:
@@ -48,17 +48,17 @@ def get_frame_landmarks(frame):
                 offset = 21 * i
                 for idx, landmark in enumerate(hand_landmarks.landmark):
                     if idx < 21:
-                        palm_landmarks[offset + idx] = [landmark.x, landmark.y, landmark.z]
+                        palm_landmarks[offset + idx] = [landmark.x, landmark.y]
 
     results_pose = pose.process(frame)
     if results_pose.pose_landmarks:
         upper_body_indices = [11, 12, 13, 14, 23, 24]
         for i, idx in enumerate(upper_body_indices):
             landmark = results_pose.pose_landmarks.landmark[idx]
-            body_landmarks[i] = [landmark.x, landmark.y, landmark.z]
+            body_landmarks[i] = [landmark.x, landmark.y]
 
         face_landmark = results_pose.pose_landmarks.landmark[0]
-        body_landmarks[6] = [face_landmark.x, face_landmark.y, face_landmark.z]
+        body_landmarks[6] = [face_landmark.x, face_landmark.y]
 
     return palm_landmarks, body_landmarks
 
