@@ -5,7 +5,7 @@ from collections import defaultdict
 from augmentation import (generate_params, 
                         augment_skeleton_sequence_combined)
 from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
-from utils.data_utils import (denormalize_landmarks, normalize_landmarks)
+from utils.data_utils import (denormalize_landmarks, normalize_landmarks, select_sign_frames)
 from config import *
 import glob
 
@@ -28,50 +28,92 @@ def augment_dataset(input_path, output_path, target_videos=100):
             original_count = len(videos)
             total_original += original_count
             
+            # Add original videos to output
+            augmented_data[word].extend(videos)
+            
             # Calculate how many copies we need
             augmentations_needed = max(0, target_videos - original_count)
-            copies_per_video = -(-augmentations_needed // original_count)
+            copies_per_video = -(-augmentations_needed // original_count) if original_count > 0 else 0
             
             logging.info(f"Processing '{word}': {original_count} original videos, need {augmentations_needed} more")
             
-            augmented_data[word].extend(videos)
+            # Examine the structure of first video for debugging
+            if original_count > 0:
+                first_video = videos[0]
+                logging.info(f"First video for '{word}' - Type: {type(first_video)}, Length: {len(first_video) if isinstance(first_video, (list, tuple)) else 'N/A'}")
+                
+                if isinstance(first_video, list) and len(first_video) > 0:
+                    first_frame = first_video[0]
+                    logging.info(f"First frame - Type: {type(first_frame)}, Shape/Length: {first_frame.shape if hasattr(first_frame, 'shape') else len(first_frame) if isinstance(first_frame, (list, tuple)) else 'N/A'}")
+                    
+                    # If first_frame is a list and not empty, check its first element
+                    if isinstance(first_frame, list) and len(first_frame) > 0:
+                        first_landmark = first_frame[0]
+                        logging.info(f"First landmark - Type: {type(first_landmark)}, Value: {first_landmark}")
+            
+            # Skip further processing if no videos need augmentation
+            if augmentations_needed <= 0:
+                logging.info(f"No augmentation needed for '{word}', already has {original_count} videos")
+                stats[word] = {
+                    'original_videos': original_count,
+                    'augmented_videos': 0,
+                    'total_videos': original_count
+                }
+                continue
+            
+            # Keep track of successful augmentations
+            successful_augmentations = 0
             
             for video_idx, video in enumerate(videos, 1):
                 for copy in range(copies_per_video):
                     if len(augmented_data[word]) >= target_videos:
                         break
-                        
-                    # Generate parameters ONCE for the entire video
-                    shear_params, trans_params, scale_params = generate_params()
                     
-                    # Select augmentation method ONCE for the entire video
-                    new_video = []
-                    for frame in video:
-                        # Denormalize landmarks
-                        frame = np.array(frame, dtype=np.float32)
-                        frame = denormalize_landmarks(frame)
+                    try:
+                        # Try to get frames for augmentation
+                        video_frames = select_sign_frames(video)
                         
-                        # Apply combined augmentations
-                        combined_augmentations = augment_skeleton_sequence_combined(
-                            frame, 
-                            shear_params, 
-                            trans_params, 
-                            scale_params
-                        )
+                        # Generate parameters ONCE for the entire video
+                        shear_params, trans_params, scale_params = generate_params()
                         
-                        # Randomly select one augmentation method
-                        aug_method = np.random.choice(list(combined_augmentations.keys()))
-                        augmented_frame = combined_augmentations[aug_method]
+                        # Create a new augmented video
+                        new_video = []
                         
-                        # Normalize and add to video
-                        augmented_frame = normalize_landmarks(augmented_frame)
-                        new_video.append(augmented_frame.tolist())
+                        for frame in video_frames:
+                            # Denormalize landmarks
+                            frame = np.array(frame, dtype=np.float32)
+                            frame = denormalize_landmarks(frame)
+                            
+                            # Apply combined augmentations
+                            combined_augmentations = augment_skeleton_sequence_combined(
+                                frame, 
+                                shear_params, 
+                                trans_params, 
+                                scale_params
+                            )
+                            
+                            # Randomly select one augmentation method
+                            aug_method = np.random.choice(list(combined_augmentations.keys()))
+                            augmented_frame = combined_augmentations[aug_method]
+                            
+                            # Normalize and add to video
+                            augmented_frame = normalize_landmarks(augmented_frame)
+                            new_video.append(augmented_frame.tolist())
+                        
+                        augmented_data[word].append(new_video)
+                        successful_augmentations += 1
+                        total_augmented += 1
+                        
+                        if video_idx % 10 == 0 or successful_augmentations % 100 == 0:
+                            logging.info(f"Created {len(augmented_data[word])}/{target_videos} videos for '{word}'")
                     
-                    augmented_data[word].append(new_video)
-                    total_augmented += 1
-                    
-                    if video_idx % 10 == 0:
-                        logging.info(f"Created {len(augmented_data[word])}/{target_videos} videos for '{word}'")
+                    except ValueError as e:
+                        # Log specific value errors from select_sign_frames
+                        if video_idx <= 10:  # Only log first few to avoid cluttering logs
+                            logging.warning(f"Could not select sign frames for '{word}' video {video_idx}: {e}")
+                    except Exception as e:
+                        if video_idx <= 10:  # Only log first few to avoid cluttering logs
+                            logging.warning(f"Error during augmentation for '{word}' video {video_idx}: {e}")
 
             final_count = len(augmented_data[word])
             stats[word] = {
@@ -105,8 +147,10 @@ def augment_dataset(input_path, output_path, target_videos=100):
 
     except Exception as e:
         logging.error(f"Error during augmentation: {e}")
+        import traceback
+        logging.error(f"Traceback: {traceback.format_exc()}")
         return None, None
-
+    
 def main():
     #top_n = 20
     target_videos = 6000
@@ -127,7 +171,7 @@ def main():
         return
 
     # Prepare output directory
-    output_dir = os.path.join(input_dir, f"split_augmentation")
+    output_dir = os.path.join(input_dir, f"split_augmentation_{MAX_FRAMES}")
     os.makedirs(output_dir, exist_ok=True)
 
     # Comprehensive stats to collect across all datasets

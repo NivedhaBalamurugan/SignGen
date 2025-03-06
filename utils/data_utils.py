@@ -106,45 +106,71 @@ def denormalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
 
 
 def select_sign_frames(original_frames):
+    """
+    Select the most informative frames from a sign video.
+    Handles various input formats and potential structural issues.
+    """
+    # Guard against empty input
+    if not original_frames or len(original_frames) == 0:
+        raise ValueError("Empty frame sequence provided.")
     
-    # 1. Filter valid frames
+    # Ensure frames are in correct format
     valid_frames = []
     valid_indices = []
     
     for idx, frame in enumerate(original_frames):
-        # Check if any joint has all 3 coordinates as 0
-        if np.any(np.all(frame == 0, axis=1)):
+        # Skip if frame is not a proper data structure
+        if not isinstance(frame, (list, np.ndarray)):
             continue
             
-        # Split joints
-        upper = frame[:7]       # 0-6: Upper body
-        hand1 = frame[7:28]     # 7-27: Hand 1
-        hand2 = frame[28:49]    # 28-48: Hand 2
-        
-        # Check upper body (all joints must be present)
-        if np.any(np.all(upper == 0, axis=1)):
-            continue
+        # Convert to numpy array for consistent handling
+        try:
+            if isinstance(frame, list):
+                frame = np.array(frame, dtype=np.float32)
+                
+            # Skip frames with wrong dimensions
+            if frame.ndim == 0 or frame.shape[0] != 49:
+                continue
+                
+            # Check if any joint has all 3 coordinates as 0
+            if np.any(np.all(frame == 0, axis=1)):
+                continue
+                
+            # Split joints - make sure frame has correct structure first
+            if frame.ndim < 2 or frame.shape[1] < 3:
+                continue
+                
+            upper = frame[:7]       # 0-6: Upper body
+            hand1 = frame[7:28]     # 7-27: Hand 1
+            hand2 = frame[28:49]    # 28-48: Hand 2
             
-        # Check palm index (index 0 in hand 1 or hand 2)
-        if np.all(hand1[0] == 0) or np.all(hand2[0] == 0):
-            continue
+            # Check upper body (all joints must be present)
+            if np.any(np.all(upper == 0, axis=1)):
+                continue
+                
+            # Check palm index (index 0 in hand 1 or hand 2)
+            if np.all(hand1[0] == 0) or np.all(hand2[0] == 0):
+                continue
+                
+            # Check hand validity
+            hand1_zero = np.sum(np.all(hand1 == 0, axis=1)) 
+            hand2_zero = np.sum(np.all(hand2 == 0, axis=1))
             
-        # Check hand validity
-        hand1_zero = np.sum(np.all(hand1 == 0, axis=1)) 
-        hand2_zero = np.sum(np.all(hand2 == 0, axis=1))
-        
-        if (hand1_zero > 10 or hand2_zero > 10 or 
-            np.all(hand1 == 0) or np.all(hand2 == 0)):
+            if (hand1_zero > 10 or hand2_zero > 10 or 
+                np.all(hand1 == 0) or np.all(hand2 == 0)):
+                continue
+                
+            valid_frames.append(frame)
+            valid_indices.append(idx)
+        except Exception as e:
+            # Skip frames that cause errors
             continue
-            
-        valid_frames.append(frame)
-        valid_indices.append(idx)
 
-    # 2. Early exit if no valid frames
+    # Early exit if no valid frames
     if len(valid_frames) == 0:
         raise ValueError("No valid frames found in the video.")
 
-    # 3. Motion scoring (focus on hand trajectories)
+    # Motion scoring (focus on hand trajectories)
     motion_scores = np.zeros(len(valid_frames))
     hand_joints = list(range(7, 49))  # All hand joints
     
@@ -159,21 +185,26 @@ def select_sign_frames(original_frames):
             
         prev_hands = current_hands
 
-    # 4. Select frames with highest motion scores
-    selected_indices = np.argsort(motion_scores)[-30:]
-    selected_indices = np.sort(selected_indices)  # Maintain temporal order
+    # Select frames with highest motion scores (up to 30)
+    if len(motion_scores) <= 30:
+        selected_indices = np.arange(len(motion_scores))
+    else:
+        selected_indices = np.argsort(motion_scores)[-30:]
     
+    selected_indices = np.sort(selected_indices)  # Maintain temporal order
     selected_frames = [valid_frames[i] for i in selected_indices]
 
-    # 5. If fewer than 30 frames, uniformly repeat frames to make it 30
+    # If fewer than 30 frames, uniformly repeat frames to make it 30
     if len(selected_frames) < 30:
         num_frames_needed = 30 - len(selected_frames)
-        repeat_indices = np.linspace(0, len(selected_frames) - 1, num_frames_needed, dtype=int)
-        repeated_frames = [selected_frames[i] for i in repeat_indices]
-        selected_frames.extend(repeated_frames)
-        
-        # Sort the final list to preserve temporal order
-        selected_frames = [selected_frames[i] for i in np.argsort(np.concatenate([selected_indices, repeat_indices]))]
+        if len(selected_frames) > 0:  # Check to avoid division by zero
+            repeat_indices = np.linspace(0, len(selected_frames) - 1, num_frames_needed, dtype=int)
+            repeated_frames = [selected_frames[i] for i in repeat_indices]
+            selected_frames.extend(repeated_frames)
+            
+            # Sort the final list to preserve temporal order
+            selected_frames = [selected_frames[i] for i in np.argsort(np.concatenate([selected_indices, repeat_indices]))]
+        else:
+            raise ValueError("No valid frames to repeat.")
 
     return selected_frames[:30]  # Ensure exactly 30 frames
-

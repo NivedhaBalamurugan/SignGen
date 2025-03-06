@@ -13,7 +13,7 @@ MAX_FRAMES = 233
 NUM_JOINTS = 49
 NUM_COORDINATES = 3
 
-generator = tf.keras.models.load_model("Models\cgan_model\checkpoints\generator_epoch2_loss2.0081.keras")
+generator = tf.keras.models.load_model("Models\cgan_model\checkpoints\generator_epoch11_loss1.1245.keras")
 
 
 def generate_skeleton_sequence(word):
