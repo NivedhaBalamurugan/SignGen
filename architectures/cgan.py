@@ -33,4 +33,4 @@ def build_discriminator():
 
 def discriminator_loss(real_output: tf.Tensor, fake_output: tf.Tensor) -> tf.Tensor:
     """Calculate the discriminator loss for Wasserstein GAN."""
-    return tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)  # FIXED LOSS this is my cgan file . can you make changes in the code to solve the 1st problem u stated
+    return tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)  
