@@ -29,6 +29,9 @@ MAX_SAMPLES_PER_BATCH = 1000
 MEMORY_THRESHOLD = 85
 EVAL_FREQUENCY = 10
 PREFETCH_FACTOR = 2
+MEMORY_THRESHOLD = 85
+EMBEDDING_DIM = 50
+MAX_FRAMES = 30
 
 class nullcontext:
     def __enter__(self):
@@ -48,6 +51,7 @@ def check_memory():
         torch.cuda.empty_cache() if torch.cuda.is_available() else None
         return True
     return False
+
 
 class LandmarkDataset(Dataset):
     def __init__(self, file_paths, transform=None):
@@ -95,7 +99,7 @@ class LandmarkDataset(Dataset):
                                     # Convert once then reuse
                                     video_hash = hash(str(video))
                                     if video_hash not in video_dict:
-                                        padded_video = self._pad_video(video)
+                                        padded_video = video
                                         try:
                                             padded_video = np.array(padded_video, dtype=np.float32)
                                             video_dict[video_hash] = padded_video
@@ -107,24 +111,13 @@ class LandmarkDataset(Dataset):
                                         
                                     # Add to dataset only once
                                     self.data.append((padded_video, gloss))
-                                    self.data.append((padded_video, gloss))
                         except Exception as e:
                             logging.error(f"Error processing line in {file_path}: {e}")
                             continue
                 logging.info(f"Completed reading from {file_path}")
             except Exception as e:
                 logging.error(f"Error opening file {file_path}: {e}")
-
-    
-    def _pad_video(self, video):
-        # Pre-allocate array for better performance
-        num_existing_frames = len(video)
-        if num_existing_frames >= MAX_FRAMES:
-            return video[:MAX_FRAMES]  
-        
-        padded_video = np.zeros((MAX_FRAMES, 49, 3), dtype=np.float32)
-        padded_video[:num_existing_frames] = np.array(video[:num_existing_frames])
-        return padded_video
+                
 
     def __len__(self):
         return len(self.data)
@@ -144,7 +137,6 @@ class LandmarkDataset(Dataset):
         if self.transform:
             sample = self.transform(sample)
         return sample
-
 
 
 def train(model, train_loader, val_loader, device, num_epochs=100, lr=1e-3, beta_start=0.1, beta_max=1.0, lambda_lc=0):

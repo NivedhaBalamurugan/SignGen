@@ -79,8 +79,11 @@ def augment_dataset(input_path, output_path, target_videos=100):
                     
                     try:
                         # Try to get frames for augmentation
+                        if len(video) < 30:
+                            continue
                         video_frames = select_sign_frames(video)
-                        
+                        if len(video_frames) < 30:
+                            contine
                         # Generate parameters ONCE for the entire video
                         shear_params, trans_params, scale_params = generate_params()
                         
