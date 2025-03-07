@@ -6,29 +6,24 @@ from scipy.spatial.distance import cdist
 
 
 def load_word_embeddings(filepath):    
-       
-    with open(filepath, 'r') as file:
-        data = json.load(file)
-    
-    # Count the number of original videos for each word
-    word_counts = {}
-    for word, details in data.items():
-        if word == "__summary__":
-            continue
-        original_videos = details.get('original_videos', 0)
-        word_counts[word] = original_videos
-    
-    # Select the top 20 words with the highest original video counts
-    top_words = sorted(word_counts, key=word_counts.get, reverse=True)[:20]
-    
-    # Create one-hot encoding for the top words
+        
+    if not os.path.exists(filepath):
+        logging.error(f"Word embeddings file not found: {filepath}")
+        return None
+        
     word_embeddings = {}
-    for i, word in enumerate(top_words):
-        one_hot_vector = np.zeros(len(top_words), dtype=np.float32)
-        one_hot_vector[i] = 1.0
-        word_embeddings[word] = one_hot_vector
-    
-    return word_embeddings
+    try:
+        with open(filepath, encoding="utf8") as file:
+            for line in file:
+                values = line.split()
+                word = values[0]
+                vector = np.asarray(values[1:], dtype=FP_PRECISION)
+                word_embeddings[word] = vector
+        logging.info(f"Loaded {len(word_embeddings)} word embeddings")
+        return word_embeddings
+    except Exception as e:
+        logging.error(f"Error loading word embeddings: {e}")
+        return None
 
 
 
@@ -38,7 +33,7 @@ def load_skeleton_sequences(filepaths):
     for filepath in filepaths:
         if not os.path.exists(filepath):
             logging.error(f"Skeleton data file not found: {filepath}")
-            continue
+            continue  
             
         try:
             with open(filepath, 'r') as file:
@@ -48,14 +43,59 @@ def load_skeleton_sequences(filepaths):
                     videos = data[word]
                     
                     if word not in skeleton_data:
-                        skeleton_data[word] = []
+                        skeleton_data[word] = []  
                     
-                    skeleton_data[word].extend([pad_video(video, MAX_FRAMES) for video in videos])
-            logging.info(f"Processed {filepath}")
-        except Exception as e:
-            logging.error(f"Error processing {filepath}: {e}")
+        
+                    for video in videos:
+        
+                        for frame in video:
+                            upper = frame[:7]
+                            left_wrist = frame[7]
+                            left_finger_1 = frame[8]
+                            left_finger_2 = frame[11]
+                            left_finger_3 = frame[12]
+                            left_finger_4 = frame[15]
+                            left_finger_5 = frame[16]
+                            left_finger_6 = frame[19]
+                            left_finger_7 = frame[20]
+                            left_finger_8 = frame[23]
+                            left_finger_9 = frame[24]
+                            left_finger_10 = frame[27]
+                            right_wrist = frame[28]
+                            right_finger_1 = frame[29]
+                            right_finger_2 = frame[32]
+                            right_finger_3 = frame[33]
+                            right_finger_4 = frame[36]
+                            right_finger_5 = frame[37]
+                            right_finger_6 = frame[40]
+                            right_finger_7 = frame[41]
+                            right_finger_8 = frame[44]
+                            right_finger_9 = frame[45]
+                            right_finger_10 = frame[48]
 
+                   
+                            arr = np.concatenate((
+                                upper, [left_wrist], [left_finger_1], [left_finger_2], 
+                                [left_finger_3], [left_finger_4], [left_finger_5], [left_finger_6], 
+                                [left_finger_7], [left_finger_8], [left_finger_9], [left_finger_10],
+                                [right_wrist], [right_finger_1], [right_finger_2], 
+                                [right_finger_3], [right_finger_4], [right_finger_5], [right_finger_6], 
+                                [right_finger_7], [right_finger_8], [right_finger_9], [right_finger_10]
+                            ))
+
+                           
+                            skeleton_data[word].append(arr)  
+
+        except Exception as e:
+            print(f"Error processing {filepath}: {e}")
+
+   
+    for word in skeleton_data:
+        skeleton_data[word] = np.array(skeleton_data[word])
+    
+    
     return skeleton_data
+
 
 def pad_video(video, max_frames):
     padded_video = np.zeros((max_frames, NUM_JOINTS, NUM_COORDINATES))
@@ -119,7 +159,7 @@ def select_sign_frames(original_frames):
     """
     # Guard against empty input
     if not original_frames or len(original_frames) == 0:
-        return []
+        raise ValueError("Empty frame sequence provided.")
     
     # Ensure frames are in correct format
     valid_frames = []
@@ -175,7 +215,7 @@ def select_sign_frames(original_frames):
 
     # Early exit if no valid frames
     if len(valid_frames) == 0:
-        return []
+        raise ValueError("No valid frames found in the video.")
 
     # Motion scoring (focus on hand trajectories)
     motion_scores = np.zeros(len(valid_frames))
@@ -212,6 +252,7 @@ def select_sign_frames(original_frames):
             # Sort the final list to preserve temporal order
             selected_frames = [selected_frames[i] for i in np.argsort(np.concatenate([selected_indices, repeat_indices]))]
         else:
-            return []
+            raise ValueError("No valid frames to repeat.")
 
     return selected_frames[:30]  # Ensure exactly 30 frames
+
