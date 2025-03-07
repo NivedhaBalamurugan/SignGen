@@ -10,20 +10,20 @@ def truncate(value, decimals):
 
 def generate_shear_params():
     # Shearing parameters
-    shear_x = truncate(np.float32(np.random.uniform(0.1, 0.2)), PARAM_PRECISION)
-    shear_y = truncate(np.float32(np.random.uniform(-0.2, -0.1)), PARAM_PRECISION)
+    shear_x = truncate(np.float32(np.random.uniform(-0.03, 0.03)), PARAM_PRECISION)
+    shear_y = truncate(np.float32(np.random.uniform(-0.03, 0.03)), PARAM_PRECISION)
     return shear_x, shear_y
 
 def generate_translation_params():
     # Translation parameters
-    tx = int(truncate(np.random.uniform(10, 20), 0))
-    ty = int(truncate(np.random.uniform(-15, 15), 0))
+    tx = int(truncate(np.random.uniform(-3, 3), 0))
+    ty = int(truncate(np.random.uniform(-3, 3), 0))
     return tx, ty
 
 def generate_scale_params():
     # Scaling parameters
-    scale_x = truncate(np.float32(np.random.uniform(1.1, 1.3)), PARAM_PRECISION)
-    scale_y = truncate(np.float32(np.random.uniform(1.1, 1.3)), PARAM_PRECISION)
+    scale_x = truncate(np.float32(np.random.uniform(0.97, 1.03)), PARAM_PRECISION)
+    scale_y = truncate(np.float32(np.random.uniform(0.97, 1.03)), PARAM_PRECISION)
     return scale_x, scale_y
 
 def generate_params():

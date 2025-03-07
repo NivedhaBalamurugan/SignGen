@@ -13,11 +13,12 @@ def build_generator():
     x = Dense(256, activation="relu")(x)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
-    outputs = Dense(MAX_FRAMES * NUM_JOINTS * 3, activation="tanh")(x)  # Output skeleton
-    outputs = Reshape((MAX_FRAMES, NUM_JOINTS, 3))(outputs)  # FIXED Reshape
+    outputs = Dense(MAX_FRAMES * NUM_JOINTS * 2, activation="tanh")(x)  # Output skeleton
+    outputs = Reshape((MAX_FRAMES, NUM_JOINTS, 2))(outputs)  # FIXED Reshape
     return Model(inputs, outputs)
+
 def build_discriminator():
-    input_shape = (30, 49, 53)
+    input_shape = (30, 49, 52)
     inputs = Input(shape=input_shape)
     x = Flatten()(inputs)
     x = Dense(128, activation="relu")(x)
@@ -28,6 +29,6 @@ def build_discriminator():
     x = Dropout(0.3)(x)
     outputs = Dense(1)(x)  # No activation for Wasserstein Loss
     return Model(inputs, outputs)
+
 def discriminator_loss(real_output: tf.Tensor, fake_output: tf.Tensor) -> tf.Tensor:
-    """Calculate the discriminator loss.
     return tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)  # FIXED LOSS
