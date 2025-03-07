@@ -6,19 +6,19 @@ from keras.layers import GRU, Dense, Input, Flatten, Dropout, BatchNormalization
 from config import *
 
 def build_generator():
-    inputs = Input(shape=(CGAN_NOISE_DIM + 50,))  # Noise + word embeddings
+    inputs = Input(shape=(CGAN_NOISE_DIM + 20,))  # Noise + one-hot encoded word embeddings (20 dimensions)
     x = Dense(128, activation="relu")(inputs)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
     x = Dense(256, activation="relu")(x)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
-    outputs = Dense(MAX_FRAMES * NUM_JOINTS * 2, activation="tanh")(x)  # Output skeleton
-    outputs = Reshape((MAX_FRAMES, NUM_JOINTS, 2))(outputs)  # FIXED Reshape
+    outputs = Dense(MAX_FRAMES * NUM_JOINTS * NUM_COORDINATES, activation="tanh")(x)  # Output skeleton
+    outputs = Reshape((MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES))(outputs)  # Reshape to (30, 29, 2)
     return Model(inputs, outputs)
 
 def build_discriminator():
-    input_shape = (30, 49, 52)
+    input_shape = (MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES + 20)  # Skeleton + one-hot encoded word embeddings
     inputs = Input(shape=input_shape)
     x = Flatten()(inputs)
     x = Dense(128, activation="relu")(x)
@@ -31,4 +31,4 @@ def build_discriminator():
     return Model(inputs, outputs)
 
 def discriminator_loss(real_output: tf.Tensor, fake_output: tf.Tensor) -> tf.Tensor:
-    return tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)  # FIXED LOSS
+    return tf.reduce_mean(fake_output) - tf.reduce_mean(real_output)  # Wasserstein Loss
