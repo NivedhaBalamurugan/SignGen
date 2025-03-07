@@ -24,6 +24,12 @@ def augment_dataset(input_path, output_path, target_videos=100):
     total_augmented = 0
 
     try:
+        running_stats = {
+            'total_videos_processed': 0,
+            'total_successful_augmentations': 0,
+            'total_failed_augmentations': 0
+        }
+
         for word, videos in data.items():
             original_count = len(videos)
             total_original += original_count
@@ -65,6 +71,8 @@ def augment_dataset(input_path, output_path, target_videos=100):
             successful_augmentations = 0
             
             for video_idx, video in enumerate(videos, 1):
+                running_stats['total_videos_processed'] += 1
+                
                 for copy in range(copies_per_video):
                     if len(augmented_data[word]) >= target_videos:
                         break
@@ -103,15 +111,18 @@ def augment_dataset(input_path, output_path, target_videos=100):
                         augmented_data[word].append(new_video)
                         successful_augmentations += 1
                         total_augmented += 1
+                        running_stats['total_successful_augmentations'] += 1
                         
                         if video_idx % 10 == 0 or successful_augmentations % 100 == 0:
                             logging.info(f"Created {len(augmented_data[word])}/{target_videos} videos for '{word}'")
+                            logging.info(f"Running stats: {running_stats}")
                     
                     except ValueError as e:
                         # Log specific value errors from select_sign_frames
                         if video_idx <= 10:  # Only log first few to avoid cluttering logs
                             logging.warning(f"Could not select sign frames for '{word}' video {video_idx}: {e}")
                     except Exception as e:
+                        running_stats['total_failed_augmentations'] += 1
                         if video_idx <= 10:  # Only log first few to avoid cluttering logs
                             logging.warning(f"Error during augmentation for '{word}' video {video_idx}: {e}")
 
@@ -131,7 +142,9 @@ def augment_dataset(input_path, output_path, target_videos=100):
             'total_original_videos': total_original,
             'total_augmented_videos': total_augmented,
             'total_videos': total_original + total_augmented,
-            'target_per_word': target_videos
+            'target_per_word': target_videos,
+            'word_stats': stats,
+            'running_stats': running_stats
         }
         
         # Save augmented data
@@ -171,7 +184,7 @@ def main():
         return
 
     # Prepare output directory
-    output_dir = os.path.join(input_dir, f"split_augmentation_{MAX_FRAMES}")
+    output_dir = os.path.join(input_dir, f"split_augmentation_{MAX_FRAMES}_aug_fix")
     os.makedirs(output_dir, exist_ok=True)
 
     # Comprehensive stats to collect across all datasets
@@ -211,6 +224,26 @@ def main():
     comprehensive_stats['total_videos'] = sum(
         stats['total_videos'] for stats in comprehensive_stats['datasets'].values()
     )
+
+    # Create word-level stats
+    word_stats = {}
+    for dataset_name, dataset in comprehensive_stats['datasets'].items():
+        if 'word_stats' in dataset:
+            for word, stats in dataset['word_stats'].items():
+                if word not in word_stats:
+                    word_stats[word] = {
+                        'original_videos': 0,
+                        'augmented_videos': 0,
+                        'total_videos': 0
+                    }
+                word_stats[word]['original_videos'] += stats['original_videos']
+                word_stats[word]['augmented_videos'] += stats['augmented_videos']
+                word_stats[word]['total_videos'] += stats['total_videos']
+
+    # Save word-level stats
+    word_stats_path = os.path.join(output_dir, f"word_level_stats.json")
+    with open(word_stats_path, 'w') as f:
+        json.dump(word_stats, f, indent=2)
 
     # Save comprehensive stats
     stats_path = os.path.join(output_dir, f"augmentation_split_stats.json")

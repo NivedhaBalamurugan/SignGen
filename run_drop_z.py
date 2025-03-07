@@ -24,8 +24,8 @@ def process_file(input_path, output_path):
     save_jsonl_gz(output_path, processed_data, single_object=False)
 
 def main():
-    input_dir = f"Dataset\landmarks\split_augmentation_30"
-    output_dir =  f"Dataset\landmarks\split_augmentation_30_no_z"
+    input_dir = f"Dataset\landmarks\split_augmentation_30_aug_fix"
+    output_dir =  f"Dataset\landmarks\split_augmentation_30_aug_fix_no_z"
     
     os.makedirs(output_dir, exist_ok=True)
     jsonl_files = sorted(glob.glob(os.path.join(input_dir, "*.jsonl.gz")))
