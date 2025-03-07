@@ -14,12 +14,12 @@ def build_generator():
     x = Dense(256, activation="relu")(x)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
-    outputs = Dense(MAX_FRAMES * NUM_JOINTS * 3, activation="tanh")(x)  # Output skeleton
-    outputs = Reshape((MAX_FRAMES, NUM_JOINTS, 3))(outputs)  # FIXED Reshape
+    outputs = Dense(MAX_FRAMES * NUM_JOINTS * 2, activation="tanh")(x)  # Output skeleton
+    outputs = Reshape((MAX_FRAMES, NUM_JOINTS, 2))(outputs)
     return Model(inputs, outputs)
 
 def build_discriminator():
-    input_shape = (30, 49, 53)  # Fixed to 30 frames, 49 joints, and 53 features (3 + 50)
+    input_shape = (MAX_FRAMES, NUM_JOINTS, 52)
     inputs = Input(shape=input_shape)
     
     # Flatten the input

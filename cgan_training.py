@@ -188,10 +188,6 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             real_input = tf.concat([real_skeleton_batch, word_vector_expanded], axis=-1)
             fake_input = tf.concat([generated_skeleton, word_vector_expanded], axis=-1)
     
-            # Debug shapes
-            print("Real input shape:", real_input.shape)
-            print("Fake input shape:", fake_input.shape)
-    
             real_output = discriminator(real_input, training=True)
             fake_output = discriminator(fake_input, training=True)
     
