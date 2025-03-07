@@ -83,7 +83,7 @@ def augment_dataset(input_path, output_path, target_videos=100):
                             continue
                         video_frames = select_sign_frames(video)
                         if len(video_frames) < 30:
-                            contine
+                            continue
                         # Generate parameters ONCE for the entire video
                         shear_params, trans_params, scale_params = generate_params()
                         
