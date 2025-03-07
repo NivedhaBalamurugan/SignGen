@@ -5,25 +5,31 @@ from config import *
 from scipy.spatial.distance import cdist
 
 
+
 def load_word_embeddings(filepath):    
-        
-    if not os.path.exists(filepath):
-        logging.error(f"Word embeddings file not found: {filepath}")
-        return None
-        
+       
+    with open(filepath, 'r') as file:
+        data = json.load(file)
+    
+    # Count the number of original videos for each word
+    word_counts = {}
+    for word, details in data.items():
+        if word == "__summary__":
+            continue
+        original_videos = details.get('original_videos', 0)
+        word_counts[word] = original_videos
+    
+    # Select the top 20 words with the highest original video counts
+    top_words = sorted(word_counts, key=word_counts.get, reverse=True)[:20]
+    
+    # Create one-hot encoding for the top words
     word_embeddings = {}
-    try:
-        with open(filepath, encoding="utf8") as file:
-            for line in file:
-                values = line.split()
-                word = values[0]
-                vector = np.asarray(values[1:], dtype=FP_PRECISION)
-                word_embeddings[word] = vector
-        logging.info(f"Loaded {len(word_embeddings)} word embeddings")
-        return word_embeddings
-    except Exception as e:
-        logging.error(f"Error loading word embeddings: {e}")
-        return None
+    for i, word in enumerate(top_words):
+        one_hot_vector = np.zeros(len(top_words), dtype=np.float32)
+        one_hot_vector[i] = 1.0
+        word_embeddings[word] = one_hot_vector
+    
+    return word_embeddings
 
 
 
