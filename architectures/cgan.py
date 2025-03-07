@@ -8,14 +8,20 @@ from config import *
 
 def build_generator():
     inputs = Input(shape=(CGAN_NOISE_DIM + 50,))  # Noise + word embeddings
-    x = Dense(128, activation="relu")(inputs)
+    x = Dense(256, activation="relu")(inputs)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
-    x = Dense(256, activation="relu")(x)
-    x = BatchNormalization()(x)
-    x = Dropout(0.3)(x)
-    outputs = Dense(MAX_FRAMES * NUM_JOINTS * 2, activation="tanh")(x)  # Output skeleton
-    outputs = Reshape((MAX_FRAMES, NUM_JOINTS, 2))(outputs)
+    
+    # Expand latent vector to a sequence of MAX_FRAMES time steps
+    x = RepeatVector(MAX_FRAMES)(x)  # Now shape is (batch_size, MAX_FRAMES, 256)
+    
+    # Apply GRU layers to model temporal dependencies
+    x = GRU(128, return_sequences=True)(x)
+    x = GRU(128, return_sequences=True)(x)
+    
+    # Map to the output dimension: NUM_JOINTS * 3 per frame
+    x = Dense(NUM_JOINTS * 2, activation="tanh")(x)
+    outputs = Reshape((MAX_FRAMES, NUM_JOINTS, 2))(x)
     return Model(inputs, outputs)
 
 def build_discriminator():
