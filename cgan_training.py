@@ -38,7 +38,7 @@ def process_file_batch(files, word_embeddings):
 def process_data_batches(jsonl_files, word_embeddings):
     total_sequences = []
     total_vectors = []
-    num_batches = -(-len(jsonl_files)//FILES_PER_BATCH
+    num_batches = -(-len(jsonl_files)//FILES_PER_BATCH)
     with tqdm(total=num_batches, desc="Processing files") as pbar:
         for i in range(0, len(jsonl_files), FILES_PER_BATCH):
             file_batch = jsonl_files[i:i + FILES_PER_BATCH]
@@ -226,12 +226,26 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
 
         logging.info(f"Epoch {epoch+1}/{epochs} - Gen Loss: {epoch_gen_loss_value:.4f}, Disc Loss: {epoch_disc_loss_value:.4f}, Combined Loss: {combined_loss:.4f}")
         
+        # Save checkpoint after every epoch
+        current_history = {
+            'total_gen_loss': total_gen_loss,
+            'total_disc_loss': total_disc_loss,
+            'epoch': epoch + 1,
+            'current_loss': combined_loss
+        }
+        gen_path, disc_path = save_model_checkpoint(
+            generator, 
+            discriminator, 
+            current_history,
+            epoch + 1,
+            combined_loss
+        )
+        
+        # Update best model if loss improved
         if combined_loss < best_loss:
             logging.info(f"Loss improved from {best_loss:.4f} to {combined_loss:.4f}")
             best_loss = combined_loss
             patience_counter = 0
-            current_history = {'total_gen_loss': total_gen_loss, 'total_disc_loss': total_disc_loss, 'epoch': epoch + 1, 'best_loss': best_loss}
-            gen_path, disc_path = save_model_checkpoint(generator, discriminator, current_history, epoch + 1, combined_loss)
             best_generator_weights = get_model_weights(generator)
             best_discriminator_weights = get_model_weights(discriminator)
         else:
