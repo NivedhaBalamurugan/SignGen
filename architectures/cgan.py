@@ -1,8 +1,8 @@
 import tensorflow as tf
 from keras.models import Sequential
-from keras.layers import GRU, Dense, Input, RepeatVector, Reshape, TimeDistributed, Bidirectional, UpSampling1D
+from keras.layers import GRU, Dense, Input, Reshape, TimeDistributed, Bidirectional, UpSampling1D
 from keras.models import Model
-from keras.layers import GRU, Dense, Input, Flatten, Dropout, BatchNormalization, Reshape, RepeatVector
+from keras.layers import GRU, Dense, Input, Dropout, BatchNormalization, Reshape, Conv1D, Conv2D, LeakyReLU, Permute
 from config import *
 
 def build_generator():
@@ -29,7 +29,7 @@ def build_generator():
     
     # Final dense layers to generate coordinates
     x = TimeDistributed(Dense(NUM_JOINTS * NUM_COORDINATES, activation="tanh"))(x)
-    outputs = Reshape((MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES))(x[:, :MAX_FRAMES])  # Ensure output size matches expected
+    outputs = Reshape((MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES))(x[:, :MAX_FRAMES])
     
     return Model(inputs, outputs)
 
@@ -41,18 +41,30 @@ def build_discriminator():
     # Reshape for easier processing
     x = Reshape((MAX_FRAMES, NUM_JOINTS * (NUM_COORDINATES + EMBEDDING_DIM)))(inputs)
     
-    # Temporal feature extraction
-    x = Bidirectional(GRU(64, return_sequences=True))(x)
-    x = Bidirectional(GRU(64, return_sequences=False))(x)  # Return only final state
+    # 1D convolutions across time dimension
+    x = Conv1D(128, kernel_size=5, strides=1, padding='same')(x)
+    x = LeakyReLU(0.2)(x)
+    x = Conv1D(256, kernel_size=5, strides=2, padding='same')(x)
+    x = LeakyReLU(0.2)(x)
+    x = BatchNormalization()(x)
+    
+    # Process joint relationships with 1D convolutions
+    x = Conv1D(256, kernel_size=3, strides=1, padding='same')(x)
+    x = LeakyReLU(0.2)(x)
+    x = BatchNormalization()(x)
+    
+    # GRU layers for temporal processing
+    x = Bidirectional(GRU(128, return_sequences=True))(x)
+    x = Bidirectional(GRU(128, return_sequences=False))(x)
     
     # Dense classification layers
+    x = Dense(256, activation="relu")(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.3)(x)
     x = Dense(128, activation="relu")(x)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
-    x = Dense(64, activation="relu")(x)
-    x = BatchNormalization()(x)
-    x = Dropout(0.3)(x)
-    outputs = Dense(1)(x)  # No activation for Wasserstein Loss
+    outputs = Dense(1)(x)
     
     return Model(inputs, outputs)
 
