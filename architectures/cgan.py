@@ -34,21 +34,21 @@ def build_generator():
     return Model(inputs, outputs)
 
 def build_discriminator():
-    # Input: skeleton + word embeddings
-    input_shape = (MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES + EMBEDDING_DIM)
-    inputs = Input(shape=input_shape)
+    # Separate inputs for skeleton and word embeddings
+    skeleton_input = Input(shape=(MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES))
+    word_input = Input(shape=(EMBEDDING_DIM,))
     
-    # Reshape for easier processing
-    x = Reshape((MAX_FRAMES, NUM_JOINTS * (NUM_COORDINATES + EMBEDDING_DIM)))(inputs)
+    # Process skeleton with 1D convolutions
+    x = Reshape((MAX_FRAMES, NUM_JOINTS * NUM_COORDINATES))(skeleton_input)
     
-    # 1D convolutions across time dimension
+    # Process joint relationships with 1D convolutions
     x = Conv1D(128, kernel_size=5, strides=1, padding='same')(x)
     x = LeakyReLU(0.2)(x)
     x = Conv1D(256, kernel_size=5, strides=2, padding='same')(x)
     x = LeakyReLU(0.2)(x)
     x = BatchNormalization()(x)
     
-    # Process joint relationships with 1D convolutions
+    # Further process skeleton data
     x = Conv1D(256, kernel_size=3, strides=1, padding='same')(x)
     x = LeakyReLU(0.2)(x)
     x = BatchNormalization()(x)
@@ -57,8 +57,15 @@ def build_discriminator():
     x = Bidirectional(GRU(128, return_sequences=True))(x)
     x = Bidirectional(GRU(128, return_sequences=False))(x)
     
+    # Process word embedding
+    word_features = Dense(128, activation="relu")(word_input)
+    word_features = BatchNormalization()(word_features)
+    
+    # Concatenate skeleton features with word features
+    combined = Concatenate()([x, word_features])
+    
     # Dense classification layers
-    x = Dense(256, activation="relu")(x)
+    x = Dense(256, activation="relu")(combined)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
     x = Dense(128, activation="relu")(x)
@@ -66,7 +73,7 @@ def build_discriminator():
     x = Dropout(0.3)(x)
     outputs = Dense(1)(x)
     
-    return Model(inputs, outputs)
+    return Model([skeleton_input, word_input], outputs)
 
 def generator_loss(fake_output):
     return -tf.reduce_mean(fake_output)

@@ -50,19 +50,26 @@ def process_data_batches(jsonl_files, word_embeddings):
             pbar.update(1)
     return total_sequences, total_vectors
 
-def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors_expanded):
-    """Calculate gradient penalty for WGAN-GP"""
-    batch_size = tf.shape(real_skeletons)[0]
-    epsilon = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
-    epsilon = tf.tile(epsilon, [1, MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES])
-    interpolated = epsilon * real_skeletons + (1 - epsilon) * fake_skeletons
-    discriminator_input = tf.concat([interpolated, word_vectors_expanded], axis=-1)
+def gradient_penalty(discriminator, real_samples, fake_samples, word_vectors):
+    batch_size = tf.shape(real_samples)[0]
+    
+    # Generate random interpolation factors
+    alpha = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
+    
+    # Create interpolated samples between real and fake
+    interpolated = real_samples + alpha * (fake_samples - real_samples)
+    
     with tf.GradientTape() as tape:
-        tape.watch(discriminator_input)
-        pred = discriminator(discriminator_input, training=True)
-    gradients = tape.gradient(pred, discriminator_input)
-    gradients_norm = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]) + 1e-8)
-    gradient_penalty = tf.reduce_mean((gradients_norm - 1.0) ** 2)
+        tape.watch(interpolated)
+        # Pass both the interpolated samples and word vectors to discriminator
+        pred = discriminator([interpolated, word_vectors], training=True)
+        
+    gradients = tape.gradient(pred, interpolated)
+    gradients_squared = tf.square(gradients)
+    gradients_squared_sum = tf.reduce_sum(gradients_squared, axis=[1, 2, 3])
+    gradient_l2_norm = tf.sqrt(gradients_squared_sum + 1e-8)
+    gradient_penalty = tf.reduce_mean(tf.square(gradient_l2_norm - 1.0))
+    
     return gradient_penalty
 
 def calculate_pkd(real_skeletons, generated_skeletons):
@@ -191,13 +198,14 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     best_generator_weights = None
     best_discriminator_weights = None
 
+
     @tf.function
     def train_step(word_vector_batch, real_skeleton_batch):
         actual_batch_size = tf.shape(word_vector_batch)[0]
         noise = tf.random.normal([actual_batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
         word_vector_batch = tf.cast(word_vector_batch, FP_PRECISION)
         generator_input = tf.concat([noise, word_vector_batch], axis=1)
-    
+
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
             generated_skeleton = generator(generator_input, training=True)
             real_skeleton_batch = tf.cast(real_skeleton_batch, FP_PRECISION)
@@ -206,21 +214,17 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             mask = create_mask(real_skeleton_batch)
             mask = tf.reduce_mean(mask, axis=1, keepdims=True)
             
-            word_vector_expanded = tf.reshape(word_vector_batch, (actual_batch_size, 1, 1, 20))
-            word_vector_expanded = tf.tile(word_vector_expanded, [1, 30, 29, 1])
-            
-            real_input = tf.concat([real_skeleton_batch, word_vector_expanded], axis=-1)
-            fake_input = tf.concat([generated_skeleton, word_vector_expanded], axis=-1)
-            
-            real_output = discriminator(real_input, training=True)
-            fake_output = discriminator(fake_input, training=True)
+            # Pass separate inputs to discriminator
+            real_output = discriminator([real_skeleton_batch, word_vector_batch], training=True)
+            fake_output = discriminator([generated_skeleton, word_vector_batch], training=True)
             
             # Basic adversarial losses
             disc_adv_loss = discriminator_loss(real_output, fake_output)
             gen_adv_loss = generator_loss(fake_output)
             
             # Gradient penalty for WGAN-GP
-            gp = gradient_penalty(discriminator, real_skeleton_batch, generated_skeleton, word_vector_expanded)
+            # Update the gradient penalty function to handle separate inputs
+            gp = gradient_penalty(discriminator, real_skeleton_batch, generated_skeleton, word_vector_batch)
             
             # Additional generator losses
             bone_loss = bone_length_consistency_loss(generated_skeleton, joint_connections)
