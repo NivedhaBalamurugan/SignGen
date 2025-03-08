@@ -1,8 +1,8 @@
 import tensorflow as tf
 from keras.models import Sequential
-from keras.layers import GRU, Dense, Input, Reshape, TimeDistributed, Bidirectional, UpSampling1D, Concatenate
+from keras.layers import GRU, Dense, Input, Reshape, TimeDistributed, Bidirectional, UpSampling1D, Concatenate, SpectralNormalization, Add
 from keras.models import Model
-from keras.layers import GRU, Dense, Input, Dropout, BatchNormalization, Reshape, Conv1D, Conv2D, LeakyReLU, Permute
+from keras.layers import GRU, Dense, Input, Dropout, BatchNormalization, Reshape, Conv1D, Conv2D, LeakyReLU, Permute, GaussianNoise
 from config import *
 
 def self_attention(x):
@@ -23,17 +23,21 @@ def build_generator():
     x = BatchNormalization()(x)
     x = Reshape((16, 32))(x)  # Reshape to sequence format
     
-    # Bidirectional GRU for temporal coherence
-    x = Bidirectional(GRU(64, return_sequences=True))(x)
-    x = self_attention(x)
+    # Remove self-attention from GRU layers
+    x1 = Bidirectional(GRU(64, return_sequences=True))(x)
+    x2 = Bidirectional(GRU(64, return_sequences=True))(x1)
+    x2 = Add()([x1, x2])
 
-    x = Bidirectional(GRU(64, return_sequences=True))(x)
-    x = self_attention(x)
+    # Apply self-attention **after upsampling**, before final dense layers
+    x = UpSampling1D(2)(x2)  # Expand frames
+    x = self_attention(x)   # Apply here to enhance movement features
 
     # Expand to full sequence length
-    x = TimeDistributed(Dense(128, activation="relu"))(x)
+    x = TimeDistributed(Dense(128, activation="tanh"))(x)
     x = UpSampling1D(2)(x)
     x = self_attention(x)
+
+    x = Add()([x2, x])
 
     # Final dense layers to generate coordinates
     x = TimeDistributed(Dense(NUM_JOINTS * NUM_COORDINATES, activation="tanh"))(x)
@@ -48,10 +52,13 @@ def build_discriminator():
     
     # Process skeleton with 1D convolutions
     x = Reshape((MAX_FRAMES, NUM_JOINTS * NUM_COORDINATES))(skeleton_input)
+
+    x = GaussianNoise(0.05)(x) 
     
     # Process joint relationships with 1D convolutions
     x = Conv1D(128, kernel_size=5, strides=1, padding='same')(x)
     x = LeakyReLU(0.2)(x)
+
     x = Conv1D(256, kernel_size=5, strides=2, padding='same')(x)
     x = LeakyReLU(0.2)(x)
     x = BatchNormalization()(x)
@@ -66,7 +73,7 @@ def build_discriminator():
     x = Bidirectional(GRU(128, return_sequences=False))(x)
     
     # Process word embedding
-    word_features = Dense(128, activation="relu")(word_input)
+    word_features = SpectralNormalization(Dense(128, activation="relu"))(word_input)
     word_features = BatchNormalization()(word_features)
     
     # Concatenate skeleton features with word features
@@ -76,9 +83,11 @@ def build_discriminator():
     x = Dense(256, activation="relu")(combined)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
+
     x = Dense(128, activation="relu")(x)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
+    
     outputs = Dense(1)(x)
     
     return Model([skeleton_input, word_input], outputs)
@@ -118,16 +127,19 @@ def bone_length_consistency_loss(skeletons, joint_connections):
 
 def motion_smoothness_loss(skeletons):
     """
-    Encourage smooth motion while ensuring hands move enough.
+    Encourage smooth motion while ensuring hands move enough, while preventing NaNs.
     """
-    velocity = skeletons[:, 1:] - skeletons[:, :-1]
-    acceleration = velocity[:, 1:] - velocity[:, :-1]
+    velocity = skeletons[:, 1:] - skeletons[:, :-1]  # First derivative (motion between frames)
+    acceleration = velocity[:, 1:] - velocity[:, :-1]  # Second derivative (jerkiness)
 
-    velocity_loss = tf.reduce_mean(tf.square(velocity))
-    acceleration_loss = tf.reduce_mean(tf.square(acceleration))
-    variance_loss = motion_variance_loss(skeletons)
+    # Prevent NaN by adding a small epsilon before squaring
+    velocity_loss = tf.reduce_mean(tf.square(tf.clip_by_value(velocity, -1.0, 1.0) + 1e-6))
+    acceleration_loss = tf.reduce_mean(tf.square(tf.clip_by_value(acceleration, -1.0, 1.0) + 1e-6))
 
-    return (50 * velocity_loss + 100 * acceleration_loss) - (50 * variance_loss)
+    # Ensure variance doesn't lead to NaN
+    variance_loss = motion_variance_loss(skeletons) + 1e-6
+
+    return (50 * velocity_loss + 50 * acceleration_loss) - (100 * variance_loss)
 
 def anatomical_plausibility_loss(skeletons, joint_angle_limits):
     """
