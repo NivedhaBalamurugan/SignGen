@@ -106,8 +106,8 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     if not validate_data_shapes(word_vectors, skeleton_sequences):
         return False
 
-    generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5, beta_2=0.9)
-    discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5, beta_2=0.9)
+    generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0002, beta_1=0.5, beta_2=0.9)
+    discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.00005, beta_1=0.5, beta_2=0.9)
 
     total_gen_loss = 0.0
     total_disc_loss = 0.0
@@ -240,11 +240,11 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             # The key is to ensure these weights don't lead to components canceling each other
             gen_loss = (
                 1.0 * gen_adv_loss +       # Adversarial loss
-                10.0 * mse_loss +          # Reconstruction loss (high weight)
-                5.0 * bone_loss +          # Bone length consistency
-                2.0 * motion_loss +        # Motion smoothness 
-                3.0 * anatomical_loss +    # Anatomical plausibility
-                2.0 * semantic_loss        # Semantic consistency
+                5.0 * mse_loss +          # Reconstruction loss
+                8.0 * bone_loss +          # Bone length consistency
+                0.5 * motion_loss +        # Motion smoothness 
+                4.0 * anatomical_loss +    # Anatomical plausibility
+                3.0 * semantic_loss       # Semantic consistency
             )
             
             # Apply mask to focus on valid joints
