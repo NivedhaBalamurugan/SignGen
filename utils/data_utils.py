@@ -5,10 +5,34 @@ from config import *
 from scipy.spatial.distance import cdist
 
 
+def load_glove_embeddings():    
+        
+    if not os.path.exists(GLOVE_TXT_PATH):
+        logging.error(f"Word embeddings file not found: {GLOVE_TXT_PATH}")
+        return None
+        
+    word_embeddings = {}
+    try:
+        with open(GLOVE_TXT_PATH, encoding="utf8") as file:
+            for line in file:
+                values = line.split()
+                word = values[0]
+                vector = np.asarray(values[1:], dtype=FP_PRECISION)
+                word_embeddings[word] = vector
+        logging.info(f"Loaded {len(word_embeddings)} word embeddings")
+        return word_embeddings
+    except Exception as e:
+        logging.error(f"Error loading word embeddings: {e}")
+        return None
 
-def load_word_embeddings(filepath):    
+
+def load_word_embeddings():
+
+    if (EMBEDDING_DIM == 50):
+        word_embeddings = load_glove_embeddings()
+        return word_embeddings    
        
-    with open(filepath, 'r') as file:
+    with open(ONE_HOT_TXT_PATH, 'r') as file:
         data = json.load(file)
     
     # Count the number of original videos for each word

@@ -71,7 +71,7 @@ def evaluate_model(model, dataloader, device):
 
 def generate_sequence(asl_word, model):
     model.eval()
-    embedding_matrix = load_word_embeddings(GLOVE_TXT_PATH)
+    embedding_matrix = load_word_embeddings()
     cond_vector = embedding_matrix.get(asl_word, np.zeros(EMBEDDING_DIM))
     cond_vector = torch.tensor(cond_vector, dtype=torch.float32).to(device)
     

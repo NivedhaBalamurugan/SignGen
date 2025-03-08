@@ -7,7 +7,7 @@ from config import *
 
 def build_generator():
     # Input: noise + word embedding
-    inputs = Input(shape=(CGAN_NOISE_DIM + 20,))
+    inputs = Input(shape=(CGAN_NOISE_DIM + EMBEDDING_DIM,))
     
     # Dense layers to process combined input
     x = Dense(256, activation="relu")(inputs)

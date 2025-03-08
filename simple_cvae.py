@@ -55,11 +55,11 @@ def check_memory():
 
 class SignLanguageModel(nn.Module):
     def __init__(self, 
-                 input_dim=3,  # 3D coordinates per joint
-                 num_joints=49, 
-                 num_frames=233, 
+                 input_dim=NUM_COORDINATES,  # 3D coordinates per joint
+                 num_joints=NUM_JOINTS, 
+                 num_frames=MAX_FRAMES, 
                  latent_size=64,
-                 embedding_dim=50,
+                 embedding_dim=EMBEDDING_DIM,
                  num_classes=30):
         super(SignLanguageModel, self).__init__()
         self.latent_size = latent_size
@@ -292,7 +292,7 @@ class SignLanguageDataset(torch.utils.data.Dataset):
         self.data = []
         self.vocab = {}
         self.transform = transform
-        self.glove_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
+        self.glove_embeddings = load_word_embeddings()
         
         file_paths = sorted(glob.glob(file_paths))
         if not file_paths:
