@@ -228,14 +228,14 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             
             # Additional generator losses
             bone_loss = bone_length_consistency_loss(generated_skeleton, joint_connections)
-            motion_loss = motion_smoothness_loss(generated_skeleton)
+            #motion_loss = motion_smoothness_loss(generated_skeleton)
             anatomical_loss = anatomical_plausibility_loss(generated_skeleton, joint_angle_limits)
             
             # MSE reconstruction loss
             mse_loss = tf.reduce_mean(tf.square(generated_skeleton - real_skeleton_batch))
             
             # Semantic loss to ensure similar words have similar motions
-            semantic_loss = semantic_consistency_loss(generated_skeleton, word_vector_batch)
+            #semantic_loss = semantic_consistency_loss(generated_skeleton, word_vector_batch)
             
             # Combine discriminator loss components
             disc_loss = disc_adv_loss + 10.0 * gp
@@ -246,9 +246,9 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                 1.0 * gen_adv_loss +       # Adversarial loss
                 5.0 * mse_loss +          # Reconstruction loss
                 8.0 * bone_loss +          # Bone length consistency
-                0.5 * motion_loss +        # Motion smoothness 
-                4.0 * anatomical_loss +    # Anatomical plausibility
-                3.0 * semantic_loss       # Semantic consistency
+                #10.0 * motion_loss +        # Motion smoothness 
+                4.0 * anatomical_loss     # Anatomical plausibility
+                #3.0 * semantic_loss       # Semantic consistency
             )
             
             # Apply mask to focus on valid joints
@@ -265,7 +265,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
         discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
         
-        return gen_loss, disc_loss, gen_adv_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss
+        return gen_loss, disc_loss, gen_adv_loss, mse_loss, bone_loss, anatomical_loss
 
     def get_model_weights(model):
         return [var.numpy() for var in model.weights]
@@ -280,9 +280,9 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         epoch_adv_loss = tf.keras.metrics.Mean()
         epoch_mse_loss = tf.keras.metrics.Mean()
         epoch_bone_loss = tf.keras.metrics.Mean()
-        epoch_motion_loss = tf.keras.metrics.Mean()
+        #epoch_motion_loss = tf.keras.metrics.Mean()
         epoch_anatomical_loss = tf.keras.metrics.Mean()
-        epoch_semantic_loss = tf.keras.metrics.Mean()
+        #epoch_semantic_loss = tf.keras.metrics.Mean()
 
         for chunk_idx in range(chunks_per_epoch):
             chunk_start = chunk_idx * MAX_SAMPLES_PER_BATCH
@@ -305,16 +305,16 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                         batch_end = batch_start + batch_size
                         word_batch = word_vectors_chunk[batch_start:batch_end]
                         skeleton_batch = skeleton_sequences_chunk[batch_start:batch_end]
-                        gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss = train_step(word_batch, skeleton_batch)
+                        gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, anatomical_loss = train_step(word_batch, skeleton_batch)
                         
                         epoch_gen_loss.update_state(gen_loss)
                         epoch_disc_loss.update_state(disc_loss)
                         epoch_adv_loss.update_state(adv_loss)
                         epoch_mse_loss.update_state(mse_loss)
                         epoch_bone_loss.update_state(bone_loss)
-                        epoch_motion_loss.update_state(motion_loss)
+                        #epoch_motion_loss.update_state(motion_loss)
                         epoch_anatomical_loss.update_state(anatomical_loss)
-                        epoch_semantic_loss.update_state(semantic_loss)
+                        #epoch_semantic_loss.update_state(semantic_loss)
                         
                         pbar.set_postfix({
                             'gen_loss': f'{gen_loss:.4f}', 
@@ -332,16 +332,16 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                         batch_start = full_batches * batch_size
                         word_batch = word_vectors_chunk[batch_start:]
                         skeleton_batch = skeleton_sequences_chunk[batch_start:]
-                        gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss = train_step(word_batch, skeleton_batch)
+                        gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, anatomical_loss = train_step(word_batch, skeleton_batch)
                         
                         epoch_gen_loss.update_state(gen_loss)
                         epoch_disc_loss.update_state(disc_loss)
                         epoch_adv_loss.update_state(adv_loss)
                         epoch_mse_loss.update_state(mse_loss)
                         epoch_bone_loss.update_state(bone_loss)
-                        epoch_motion_loss.update_state(motion_loss)
+                        #epoch_motion_loss.update_state(motion_loss)
                         epoch_anatomical_loss.update_state(anatomical_loss)
-                        epoch_semantic_loss.update_state(semantic_loss)
+                        #epoch_semantic_loss.update_state(semantic_loss)
                         
                         pbar.set_postfix({'gen_loss': f'{gen_loss:.4f}', 'disc_loss': f'{disc_loss:.4f}'})
                         pbar.update(1)
@@ -371,9 +371,9 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             f"Combined: {combined_loss:.4f}, "
             f"MSE: {epoch_mse_loss.result().numpy():.4f}, "
             f"Bone: {epoch_bone_loss.result().numpy():.4f}, "
-            f"Motion: {epoch_motion_loss.result().numpy():.4f}, "
+            #f"Motion: {epoch_motion_loss.result().numpy():.4f}, "
             f"Anatomical: {epoch_anatomical_loss.result().numpy():.4f}, "
-            f"Semantic: {epoch_semantic_loss.result().numpy():.4f}"
+            #f"Semantic: {epoch_semantic_loss.result().numpy():.4f}"
         )
         
         # Save checkpoint and history with detailed components
@@ -386,9 +386,9 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             'disc_loss': epoch_disc_loss_value,
             'mse_loss': epoch_mse_loss.result().numpy(),
             'bone_loss': epoch_bone_loss.result().numpy(),
-            'motion_loss': epoch_motion_loss.result().numpy(),
+            #'motion_loss': epoch_motion_loss.result().numpy(),
             'anatomical_loss': epoch_anatomical_loss.result().numpy(),
-            'semantic_loss': epoch_semantic_loss.result().numpy()
+            #'semantic_loss': epoch_semantic_loss.result().numpy()
         }
         
         gen_path, disc_path = save_model_checkpoint(

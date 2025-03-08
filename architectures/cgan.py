@@ -5,6 +5,10 @@ from keras.models import Model
 from keras.layers import GRU, Dense, Input, Dropout, BatchNormalization, Reshape, Conv1D, Conv2D, LeakyReLU, Permute
 from config import *
 
+def self_attention(x):
+    attn = tf.keras.layers.MultiHeadAttention(num_heads=4, key_dim=64)(x, x)
+    return tf.keras.layers.Add()([x, attn])
+
 def build_generator():
     # Input: noise + word embedding
     inputs = Input(shape=(CGAN_NOISE_DIM + EMBEDDING_DIM,))
@@ -21,12 +25,16 @@ def build_generator():
     
     # Bidirectional GRU for temporal coherence
     x = Bidirectional(GRU(64, return_sequences=True))(x)
+    x = self_attention(x)
+
     x = Bidirectional(GRU(64, return_sequences=True))(x)
-    
+    x = self_attention(x)
+
     # Expand to full sequence length
     x = TimeDistributed(Dense(128, activation="relu"))(x)
-    x = UpSampling1D(2)(x)  # From 16 to 32 frames (can trim later)
-    
+    x = UpSampling1D(2)(x)
+    x = self_attention(x)
+
     # Final dense layers to generate coordinates
     x = TimeDistributed(Dense(NUM_JOINTS * NUM_COORDINATES, activation="tanh"))(x)
     outputs = Reshape((MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES))(x[:, :MAX_FRAMES])
@@ -110,16 +118,16 @@ def bone_length_consistency_loss(skeletons, joint_connections):
 
 def motion_smoothness_loss(skeletons):
     """
-    Penalize jerky, non-smooth motion between frames
+    Encourage smooth motion while ensuring hands move enough.
     """
-    # Calculate velocity (first derivative of position)
-    velocity = skeletons[:, 1:] - skeletons[:, :-1]  # [batch, frames-1, joints, coords]
-    
-    # Calculate acceleration (second derivative of position)
-    acceleration = velocity[:, 1:] - velocity[:, :-1]  # [batch, frames-2, joints, coords]
-    
-    # Penalize large accelerations (encourage smooth motion)
-    return tf.reduce_mean(tf.square(acceleration))
+    velocity = skeletons[:, 1:] - skeletons[:, :-1]
+    acceleration = velocity[:, 1:] - velocity[:, :-1]
+
+    velocity_loss = tf.reduce_mean(tf.square(velocity))
+    acceleration_loss = tf.reduce_mean(tf.square(acceleration))
+    variance_loss = motion_variance_loss(skeletons)
+
+    return (50 * velocity_loss + 100 * acceleration_loss) - (50 * variance_loss)
 
 def anatomical_plausibility_loss(skeletons, joint_angle_limits):
     """
@@ -182,3 +190,17 @@ def semantic_consistency_loss(generated_skeletons, word_vectors):
     
     # Loss is higher when word similarity doesn't match motion similarity
     return tf.reduce_mean(tf.square(word_similarities - skeleton_similarities))
+
+def motion_variance_loss(skeletons):
+    """
+    Encourage movement by maximizing per-joint variance across frames.
+    """
+
+    hand_joints = [x for x in range(7, 29)] 
+    hand_frames = tf.gather(skeletons, hand_joints, axis=2)
+
+    # Compute variance of hand motion across frames
+    variance = tf.math.reduce_std(hand_frames, axis=1)
+
+    # Maximize variance to encourage movement
+    return -tf.reduce_mean(variance) * 10
