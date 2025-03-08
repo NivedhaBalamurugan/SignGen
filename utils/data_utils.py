@@ -56,37 +56,37 @@ def load_skeleton_sequences(filepaths):
                             upper = frame[:7] 
                             
                             left_wrist = frame[7]
-                            left_finger_1 = frame[8]
-                            left_finger_2 = frame[11]
-                            left_finger_3 = frame[12]
-                            left_finger_4 = frame[15]
-                            left_finger_5 = frame[16]
-                            left_finger_6 = frame[19]
-                            left_finger_7 = frame[20]
-                            left_finger_8 = frame[23]
-                            left_finger_9 = frame[24]
-                            left_finger_10 = frame[27]
+                            left_thumb_cmc = frame[8]
+                            left_thumb_tip = frame[11]
+                            left_index_mcp = frame[12]
+                            left_index_tip = frame[15]
+                            left_middle_mcp = frame[16]
+                            left_middle_tip = frame[19]
+                            left_ring_mcp = frame[20]
+                            left_ring_tip = frame[23]
+                            left_pinky_mcp = frame[24]
+                            left_pinky_tip = frame[27]
                             
                             right_wrist = frame[28]
-                            right_finger_1 = frame[29]
-                            right_finger_2 = frame[32]
-                            right_finger_3 = frame[33]
-                            right_finger_4 = frame[36]
-                            right_finger_5 = frame[37]
-                            right_finger_6 = frame[40]
-                            right_finger_7 = frame[41]
-                            right_finger_8 = frame[44]
-                            right_finger_9 = frame[45]
-                            right_finger_10 = frame[48]
+                            right_thumb_mcp = frame[29]
+                            right_thumb_tip = frame[32]
+                            right_index_mcp = frame[33]
+                            right_index_tip = frame[36]
+                            right_middle_mcp = frame[37]
+                            right_middle_tip = frame[40]
+                            right_ring_mcp = frame[41]
+                            right_ring_tip = frame[44]
+                            right_pinky_mcp = frame[45]
+                            right_pinky_tip = frame[48]
                             
                             frame_landmarks = np.concatenate([
                                 upper, 
-                                [left_wrist], [left_finger_1], [left_finger_2], 
-                                [left_finger_3], [left_finger_4], [left_finger_5], [left_finger_6], 
-                                [left_finger_7], [left_finger_8], [left_finger_9], [left_finger_10],
-                                [right_wrist], [right_finger_1], [right_finger_2], 
-                                [right_finger_3], [right_finger_4], [right_finger_5], [right_finger_6], 
-                                [right_finger_7], [right_finger_8], [right_finger_9], [right_finger_10]
+                                [left_wrist], [left_thumb_cmc], [left_thumb_tip], 
+                                [left_index_mcp], [left_index_tip], [left_middle_mcp], [left_middle_tip], 
+                                [left_ring_mcp], [left_ring_tip], [left_pinky_mcp], [left_pinky_tip],
+                                [right_wrist], [right_thumb_mcp], [right_thumb_tip], 
+                                [right_index_mcp], [right_index_tip], [right_middle_mcp], [right_middle_tip], 
+                                [right_ring_mcp], [right_ring_tip], [right_pinky_mcp], [right_pinky_tip]
                             ])
                             
                             # Extract only x,y coordinates (drop z)
