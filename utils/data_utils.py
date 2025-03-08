@@ -31,8 +31,6 @@ def load_word_embeddings(filepath):
     
     return word_embeddings
 
-
-
 def load_skeleton_sequences(filepaths):
     skeleton_data = {}
     
@@ -49,13 +47,14 @@ def load_skeleton_sequences(filepaths):
                     videos = data[word]
                     
                     if word not in skeleton_data:
-                        skeleton_data[word] = []  
+                        skeleton_data[word] = []
                     
-        
                     for video in videos:
-        
-                        for frame in video:
-                            upper = frame[:7]
+                        video_sequence = np.zeros((30, 29, 2))
+                        
+                        for frame_idx, frame in enumerate(video[:30]):
+                            upper = frame[:7] 
+                            
                             left_wrist = frame[7]
                             left_finger_1 = frame[8]
                             left_finger_2 = frame[11]
@@ -67,6 +66,7 @@ def load_skeleton_sequences(filepaths):
                             left_finger_8 = frame[23]
                             left_finger_9 = frame[24]
                             left_finger_10 = frame[27]
+                            
                             right_wrist = frame[28]
                             right_finger_1 = frame[29]
                             right_finger_2 = frame[32]
@@ -78,29 +78,35 @@ def load_skeleton_sequences(filepaths):
                             right_finger_8 = frame[44]
                             right_finger_9 = frame[45]
                             right_finger_10 = frame[48]
-
-                   
-                            arr = np.concatenate((
-                                upper, [left_wrist], [left_finger_1], [left_finger_2], 
+                            
+                            frame_landmarks = np.concatenate([
+                                upper, 
+                                [left_wrist], [left_finger_1], [left_finger_2], 
                                 [left_finger_3], [left_finger_4], [left_finger_5], [left_finger_6], 
                                 [left_finger_7], [left_finger_8], [left_finger_9], [left_finger_10],
                                 [right_wrist], [right_finger_1], [right_finger_2], 
                                 [right_finger_3], [right_finger_4], [right_finger_5], [right_finger_6], 
                                 [right_finger_7], [right_finger_8], [right_finger_9], [right_finger_10]
-                            ))
-
-                           
-                            skeleton_data[word].append(arr)  
+                            ])
+                            
+                            # Extract only x,y coordinates (drop z)
+                            frame_landmarks_2d = frame_landmarks[:, :2]
+                            
+                            video_sequence[frame_idx] = frame_landmarks_2d
+                        
+                        skeleton_data[word].append(video_sequence)
 
         except Exception as e:
-            print(f"Error processing {filepath}: {e}")
+            logging.error(f"Error processing {filepath}: {str(e)}")
+            continue
 
-   
+    # Convert lists to numpy arrays
     for word in skeleton_data:
         skeleton_data[word] = np.array(skeleton_data[word])
-    
+        logging.info(f"Word '{word}' has shape {skeleton_data[word].shape}")
     
     return skeleton_data
+
 
 
 def pad_video(video, max_frames):

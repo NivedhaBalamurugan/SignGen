@@ -270,7 +270,7 @@ def main():
     os.makedirs(os.path.dirname(CGAN_DIS_PATH), exist_ok=True)
 
     word_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
-    if not word_embeddings or not validate_word_embeddings(word_embeddings, CGAN_NOISE_DIM):
+    if not word_embeddings or not validate_word_embeddings(word_embeddings):
         return
 
     jsonl_files = sorted(glob.glob(FINAL_JSONL_PATHS))

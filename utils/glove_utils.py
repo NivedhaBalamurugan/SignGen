@@ -2,7 +2,7 @@ import os
 import numpy as np
 from config import *
 
-def validate_word_embeddings(word_embeddings, expected_dim=50):
+def validate_word_embeddings(word_embeddings, expected_dim=EMBEDDING_DIM):
     if not word_embeddings:
         return False
         
