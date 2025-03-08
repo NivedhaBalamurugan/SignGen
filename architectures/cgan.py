@@ -1,6 +1,6 @@
 import tensorflow as tf
 from keras.models import Sequential
-from keras.layers import GRU, Dense, Input, Reshape, TimeDistributed, Bidirectional, UpSampling1D
+from keras.layers import GRU, Dense, Input, Reshape, TimeDistributed, Bidirectional, UpSampling1D, Concatenate
 from keras.models import Model
 from keras.layers import GRU, Dense, Input, Dropout, BatchNormalization, Reshape, Conv1D, Conv2D, LeakyReLU, Permute
 from config import *

@@ -12,7 +12,7 @@ generator = tf.keras.models.load_model("Models\cgan_model\checkpoints\generator_
 
 
 def generate_skeleton_sequence(word):
-    word_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
+    word_embeddings = load_word_embeddings()
     if word not in word_embeddings:
         print(f"Word '{word}' not found in embeddings.")
         return None
