@@ -10,7 +10,7 @@ from utils.data_utils import load_skeleton_sequences, load_word_embeddings, prep
 from utils.validation_utils import validate_data_shapes, validate_config
 from utils.model_utils import save_model_and_history, log_model_summary, log_training_config
 from utils.glove_utils import validate_word_embeddings
-from architectures.cgan import build_generator, build_discriminator, discriminator_loss
+from architectures.cgan import build_generator, build_discriminator, discriminator_loss, generator_loss
 from scipy.stats import entropy
 
 FILES_PER_BATCH = 1
@@ -49,9 +49,6 @@ def process_data_batches(jsonl_files, word_embeddings):
             check_memory()
             pbar.update(1)
     return total_sequences, total_vectors
-
-def generator_loss(fake_output):
-    return -tf.reduce_mean(fake_output)  # Clip extreme values
 
 def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors_expanded):
     """Calculate gradient penalty for WGAN-GP"""
@@ -220,7 +217,9 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
 
         epoch_gen_loss_value = epoch_gen_loss.result().numpy()
         epoch_disc_loss_value = epoch_disc_loss.result().numpy()
-        combined_loss = epoch_gen_loss_value + epoch_disc_loss_value
+        
+        combined_loss = epoch_gen_loss_value + abs(epoch_disc_loss_value)
+
         total_gen_loss += epoch_gen_loss_value
         total_disc_loss += epoch_disc_loss_value
 
