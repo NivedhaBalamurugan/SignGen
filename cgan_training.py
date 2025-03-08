@@ -102,7 +102,7 @@ def save_model_checkpoint(generator, discriminator, history, epoch, loss):
     logging.info(f"Saved checkpoint for epoch {epoch} with loss {loss:.4f}")
     return gen_path, disc_path
     
-def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs=100, batch_size=32, patience=10):
+def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs=100, batch_size=CGAN_BATCH_SIZE, patience=10):
     if not validate_data_shapes(word_vectors, skeleton_sequences):
         return False
 
@@ -125,27 +125,27 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         
         # Left hand connections
         (7, 8),   # Left wrist to left thumb CMC
-        (8, 11),  # Left thumb CMC to left thumb tip
-        (7, 12),  # Left wrist to left index MCP
-        (12, 15), # Left index MCP to left index tip
-        (7, 16),  # Left wrist to left middle MCP
-        (16, 19), # Left middle MCP to left middle tip
-        (7, 20),  # Left wrist to left ring MCP
-        (20, 23), # Left ring MCP to left ring tip
-        (7, 24),  # Left wrist to left pinky MCP
-        (24, 27), # Left pinky MCP to left pinky tip
+        (8, 9),   # Left thumb CMC to left thumb tip
+        (7, 10),  # Left wrist to left index MCP
+        (10, 11), # Left index MCP to left index tip
+        (7, 12),  # Left wrist to left middle MCP
+        (12, 13), # Left middle MCP to left middle tip
+        (7, 14),  # Left wrist to left ring MCP
+        (14, 15), # Left ring MCP to left ring tip
+        (7, 16),  # Left wrist to left pinky MCP
+        (16, 17), # Left pinky MCP to left pinky tip
         
         # Right hand connections
-        (4, 28),   # Right wrist to right thumb MCP
-        (28, 32),  # Right thumb MCP to right thumb tip
-        (4, 33),   # Right wrist to right index MCP
-        (33, 36),  # Right index MCP to right index tip
-        (4, 37),   # Right wrist to right middle MCP
-        (37, 40),  # Right middle MCP to right middle tip
-        (4, 41),   # Right wrist to right ring MCP
-        (41, 44),  # Right ring MCP to right ring tip
-        (4, 45),   # Right wrist to right pinky MCP
-        (45, 48)   # Right pinky MCP to right pinky tip
+        (4, 18),  # Right wrist to right thumb MCP
+        (18, 19), # Right thumb MCP to right thumb tip
+        (4, 20),  # Right wrist to right index MCP
+        (20, 21), # Right index MCP to right index tip
+        (4, 22),  # Right wrist to right middle MCP
+        (22, 23), # Right middle MCP to right middle tip
+        (4, 24),  # Right wrist to right ring MCP
+        (24, 25), # Right ring MCP to right ring tip
+        (4, 26),  # Right wrist to right pinky MCP
+        (26, 27)  # Right pinky MCP to right pinky tip
     ]
 
     # Define joint angle limits for anatomical plausibility
@@ -161,24 +161,24 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         (1, 5, 6, 0, 180),   # Left shoulder
         
         # Wrist angles
-        (3, 4, 28, 0, 90),   # Right wrist to thumb base
-        (3, 4, 33, 0, 90),   # Right wrist to index base
+        (3, 4, 18, 0, 90),   # Right wrist to thumb base
+        (3, 4, 20, 0, 90),   # Right wrist to index base
         (6, 7, 8, 0, 90),    # Left wrist to thumb base
-        (6, 7, 12, 0, 90),   # Left wrist to index base
+        (6, 7, 10, 0, 90),   # Left wrist to index base
         
         # Left hand finger angles
-        (7, 8, 11, 0, 90),   # Left thumb angles
-        (7, 12, 15, 0, 90),  # Left index finger
-        (7, 16, 19, 0, 90),  # Left middle finger
-        (7, 20, 23, 0, 90),  # Left ring finger
-        (7, 24, 27, 0, 90),  # Left pinky finger
+        (7, 8, 9, 0, 90),    # Left thumb angles
+        (7, 10, 11, 0, 90),  # Left index finger
+        (7, 12, 13, 0, 90),  # Left middle finger
+        (7, 14, 15, 0, 90),  # Left ring finger
+        (7, 16, 17, 0, 90),  # Left pinky finger
         
         # Right hand finger angles
-        (4, 28, 32, 0, 90),  # Right thumb angles
-        (4, 33, 36, 0, 90),  # Right index finger
-        (4, 37, 40, 0, 90),  # Right middle finger
-        (4, 41, 44, 0, 90),  # Right ring finger
-        (4, 45, 48, 0, 90)   # Right pinky finger
+        (4, 18, 19, 0, 90),  # Right thumb angles
+        (4, 20, 21, 0, 90),  # Right index finger
+        (4, 22, 23, 0, 90),  # Right middle finger
+        (4, 24, 25, 0, 90),  # Right ring finger
+        (4, 26, 27, 0, 90)   # Right pinky finger
     ]
 
     num_samples = word_vectors.shape[0]
@@ -328,9 +328,17 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                         batch_start = full_batches * batch_size
                         word_batch = word_vectors_chunk[batch_start:]
                         skeleton_batch = skeleton_sequences_chunk[batch_start:]
-                        gen_loss, disc_loss = train_step(word_batch, skeleton_batch)
+                        gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss = train_step(word_batch, skeleton_batch)
+                        
                         epoch_gen_loss.update_state(gen_loss)
                         epoch_disc_loss.update_state(disc_loss)
+                        epoch_adv_loss.update_state(adv_loss)
+                        epoch_mse_loss.update_state(mse_loss)
+                        epoch_bone_loss.update_state(bone_loss)
+                        epoch_motion_loss.update_state(motion_loss)
+                        epoch_anatomical_loss.update_state(anatomical_loss)
+                        epoch_semantic_loss.update_state(semantic_loss)
+                        
                         pbar.set_postfix({'gen_loss': f'{gen_loss:.4f}', 'disc_loss': f'{disc_loss:.4f}'})
                         pbar.update(1)
                     except Exception as e:

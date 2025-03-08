@@ -14,7 +14,7 @@ def plot_a_frame(J, filename):
     :param J: List or numpy array of shape (49, 2) representing 2D joint coordinates.
     :param filename: Output filename to save the plot.
     """
-    J = np.array(J).reshape(49, 2)  # Ensure shape is (49, 2)
+    J = np.array(J).reshape(NUM_JOINTS, NUM_COORDINATES)  # Ensure shape is (29, 2)
     if np.all(J == 0):
         return  # Skip entirely blank frames
 

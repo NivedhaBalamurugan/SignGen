@@ -8,12 +8,7 @@ from utils.data_utils import load_word_embeddings
 
 INPUT_WORD = "before"
 
-NOISE_DIM = 50
-MAX_FRAMES = 233
-NUM_JOINTS = 49
-NUM_COORDINATES = 3
-
-generator = tf.keras.models.load_model("Models\cgan_model\checkpoints\generator_epoch11_loss1.1245.keras")
+generator = tf.keras.models.load_model("Models\cgan_model\checkpoints\generator_epoch1_loss763.3392.keras")
 
 
 def generate_skeleton_sequence(word):
@@ -22,11 +17,11 @@ def generate_skeleton_sequence(word):
         print(f"Word '{word}' not found in embeddings.")
         return None
 
-    word_vector = np.array(
-        word_embeddings[word], dtype=np.float32).reshape(1, -1)
-    noise = tf.random.normal([1, NOISE_DIM], dtype=tf.float32)
-    generator_input = tf.concat([word_vector, noise], axis=1)
-
+    word_vector = np.array(word_embeddings[word], dtype=np.float32).reshape(1, -1)
+    # Generate noise with correct dimension (CGAN_NOISE_DIM)
+    noise = tf.random.normal([1, CGAN_NOISE_DIM], dtype=tf.float32)
+    generator_input = tf.concat([noise, word_vector], axis=1)
+    
     generated_skeleton = generator(generator_input, training=False).numpy()
     return generated_skeleton.squeeze()
 
