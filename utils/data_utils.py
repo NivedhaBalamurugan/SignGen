@@ -171,7 +171,7 @@ def select_sign_frames(original_frames):
     """
     # Guard against empty input
     if not original_frames or len(original_frames) == 0:
-        raise ValueError("Empty frame sequence provided.")
+        return []
     
     # Ensure frames are in correct format
     valid_frames = []
@@ -227,7 +227,7 @@ def select_sign_frames(original_frames):
 
     # Early exit if no valid frames
     if len(valid_frames) == 0:
-        raise ValueError("No valid frames found in the video.")
+        return []
 
     # Motion scoring (focus on hand trajectories)
     motion_scores = np.zeros(len(valid_frames))
@@ -264,7 +264,7 @@ def select_sign_frames(original_frames):
             # Sort the final list to preserve temporal order
             selected_frames = [selected_frames[i] for i in np.argsort(np.concatenate([selected_indices, repeat_indices]))]
         else:
-            raise ValueError("No valid frames to repeat.")
+            return []
 
     return selected_frames[:30]  # Ensure exactly 30 frames
 
