@@ -18,7 +18,8 @@ VIDEOS_PATH = os.path.join(DATASET_PATH, "videos")
 WLASL_JSON_PATH = os.path.join(DATASET_PATH, "WLASL_v0.3.json")
 MISSING_TXT_PATH = os.path.join(DATASET_PATH, "missing.txt")
 CHUNKS_JSON_PATH = os.path.join(DATASET_PATH, "chunks.json")
-GLOVE_TXT_PATH = os.path.join(DATASET_PATH, "0_landmarks_top50_aug100_stats.json")
+GLOVE_TXT_PATH = os.path.join(DATASET_PATH, "glove", "glove.6B.50d.txt")
+ONE_HOT_TXT_PATH = os.path.join(DATASET_PATH, "0_landmarks_top50_aug100_stats.json")
 
 # Landmarks paths
 LANDMARKS_PATH = os.path.join(DATASET_PATH, "landmarks")
@@ -94,7 +95,7 @@ HIDDEN_DIM = 128
 
 
 #Glove parameters
-EMBEDDING_DIM = 20
+EMBEDDING_DIM = 50
 
 def setup_logging(model):
     from datetime import datetime

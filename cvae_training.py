@@ -30,8 +30,6 @@ MEMORY_THRESHOLD = 85
 EVAL_FREQUENCY = 10
 PREFETCH_FACTOR = 2
 MEMORY_THRESHOLD = 85
-EMBEDDING_DIM = 50
-MAX_FRAMES = 30
 
 class nullcontext:
     def __enter__(self):
@@ -59,7 +57,7 @@ class LandmarkDataset(Dataset):
         self.transform = transform
         self.data = []
         self.vocab = {}
-        self.glove_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
+        self.glove_embeddings = load_word_embeddings()
         if not self.glove_embeddings or not validate_word_embeddings(self.glove_embeddings, EMBEDDING_DIM):
             logging.error("Failed to validate word embeddings")
             return

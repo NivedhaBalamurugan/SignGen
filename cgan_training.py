@@ -428,7 +428,7 @@ def main():
     os.makedirs(os.path.dirname(CGAN_GEN_PATH), exist_ok=True)
     os.makedirs(os.path.dirname(CGAN_DIS_PATH), exist_ok=True)
 
-    word_embeddings = load_word_embeddings(GLOVE_TXT_PATH)
+    word_embeddings = load_word_embeddings()
     if not word_embeddings or not validate_word_embeddings(word_embeddings):
         return
 
