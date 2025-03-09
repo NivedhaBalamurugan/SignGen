@@ -7,19 +7,12 @@ from architectures.cvae import ConditionalVAE
 from config import *
 import show_output
 from utils.data_utils import *
+from skimage.metrics import structural_similarity as ssim
+from sklearn.manifold import TSNE
+from cgan_inference import main_c
 
 warnings.filterwarnings("ignore")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-import torch
-import numpy as np
-from skimage.metrics import structural_similarity as ssim
-from sklearn.manifold import TSNE
-import matplotlib.pyplot as plt
-from torchsummary import summary
-from torchinfo import summary
-
 
 def generate_sequence(asl_word, model):
     model.eval()
@@ -34,8 +27,8 @@ def generate_sequence(asl_word, model):
     
     return generated_sequence.squeeze(0).cpu().numpy()
 
-def get_cvae_sequence(asl_word, isSave_Video):
-    model_path = os.path.join(CVAE_MODEL_PATH, "cvae16.pth")
+def get_cvae_sequence(asl_word, isSave_Video, CVAE_MODEL_PATH):
+    model_path = os.path.join(CVAE_MODEL_PATH, "cvae.pth")
     if not os.path.exists(model_path):
         logging.error("Trained model file not found.")
         return None
@@ -64,4 +57,5 @@ def get_cvae_sequence(asl_word, isSave_Video):
     return generated_skeleton
 
 if __name__ == "__main__":
-    get_cvae_sequences("before",1)
+    INPUT_WORD = "already"
+    get_cvae_sequences(INPUT_WORD,1, main_c(INPUT_WORD,0))

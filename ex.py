@@ -19,12 +19,12 @@ def get_video(data, key):
         return None
 
 def main(word):
-    file_path = 'Dataset/landmarks/final/0_landmarks_top20_split1_aug.jsonl' 
+    file_path = 'Dataset/landmarks/final/0_landmarks_top20.jsonl' 
     data = read_jsonl_file(file_path)
     video_data = get_video(data, word)
-    key_frames = np.array(video_data)  
-    # key_frames = select_sign_frames(key_frames)# Convert only if video_data is not None
-    return key_frames
+    frames = np.array(video_data)
+    frames_2d = frames[:,:,:2] 
+    return frames_2d
 
     # print(aug_video[1])
     # key_frames = select_sign_frames(aug_video)

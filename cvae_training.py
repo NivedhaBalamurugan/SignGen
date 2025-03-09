@@ -21,9 +21,9 @@ from config import *
 import warnings
 from tqdm import tqdm
 from functools import lru_cache
+from torchsummary import summary
 
 
-# Constants for batch processing
 FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000
 MEMORY_THRESHOLD = 85
@@ -62,13 +62,11 @@ class LandmarkDataset(Dataset):
             logging.error("Failed to validate word embeddings")
             return
         
-        # Process files in batches
         file_paths = sorted(glob.glob(file_paths))
         if not file_paths:
             logging.error(f"No files found matching pattern: {file_paths}")
             return
             
-        # Process files in parallel if possible
         num_batches = -(-len(file_paths)//FILES_PER_BATCH)
         with tqdm(total=num_batches, desc="Processing files") as pbar:
             for i in range(0, len(file_paths), FILES_PER_BATCH):
@@ -82,19 +80,17 @@ class LandmarkDataset(Dataset):
     def _process_file_batch(self, file_paths):
         for file_path in file_paths:
             try:
-                video_dict = {}  # Cache to avoid duplicate processing
+                video_dict = {}  
                 
                 with open(file_path, "rb") as f:
                     for line in f:
                         try:
-                            item = orjson.loads(line)  # orjson is faster than json
+                            item = orjson.loads(line)  
                             for gloss, videos in item.items():
                                 if gloss not in self.vocab:
                                     self.vocab[gloss] = len(self.vocab)
                                 
-                                # Remove the hard limit on videos per gloss
                                 for video in videos:
-                                    # Convert once then reuse
                                     video_hash = hash(str(video))
                                     if video_hash not in video_dict:
                                         padded_video = video
@@ -107,7 +103,6 @@ class LandmarkDataset(Dataset):
                                     else:
                                         padded_video = video_dict[video_hash]
                                         
-                                    # Add to dataset only once
                                     self.data.append((padded_video, gloss))
                         except Exception as e:
                             logging.error(f"Error processing line in {file_path}: {e}")
@@ -120,7 +115,6 @@ class LandmarkDataset(Dataset):
     def __len__(self):
         return len(self.data)
     
-    # Cache frequently accessed items
     @lru_cache(maxsize=512)
     def _get_cond_vector(self, gloss):
         cond_vector = self.glove_embeddings.get(gloss, np.zeros(EMBEDDING_DIM))
@@ -137,20 +131,96 @@ class LandmarkDataset(Dataset):
         return sample
 
 
+def train(model, train_loader, val_loader, device, num_epochs, lr, beta_start=0.1, beta_max=4.0, lambda_lc=0.1):
+    logging.info("Starting training...")
+    model.train()
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)  
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
+    scaler = GradScaler()
+    best_val_loss = float('inf')
+    patience = 15
+    patience_counter = 0
+
+    for epoch in range(num_epochs):
+        logging.info(f"\nEpoch {epoch+1}/{num_epochs}...")
+        epoch_loss = 0.0
+        beta = min(beta_max, beta_start + (epoch / 10)) 
+
+        for i, batch in enumerate(train_loader):
+            optimizer.zero_grad()
+            video = batch['video'].to(device)
+            condition = batch['condition'].to(device)
+
+            if torch.cuda.is_available():
+                with autocast():
+                    recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
+                    
+                    recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                    
+                    kl_loss = kl_divergence_loss(mu, logvar).mean()
+
+                    z_g = torch.normal(0, 1, size=z_v.shape).to(device)
+                    lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
+
+                    loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
+            else:
+                recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
+                recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                kl_loss = kl_divergence_loss(mu, logvar).mean()
+                z_g = torch.normal(0, 1, size=z_v.shape).to(device)
+                lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
+                loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
+
+            scaler.scale(loss).backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+            scaler.step(optimizer)
+            scaler.update()
+
+            epoch_loss += loss.item()
+
+            if i % 10 == 0:
+                logging.info(f"  Batch {i}/{len(train_loader)} | Loss: {loss.item():.4f} | Recon: {recon_loss.item():.4f} | KL: {kl_loss.item():.4f} | LC: {lc_loss.item():.4f}")
+
+        val_loss = 0.0
+        model.eval()
+        with torch.no_grad():
+            for batch in val_loader:
+                video = batch['video'].to(device)
+                condition = batch['condition'].to(device)
+                recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
+                z_g = torch.normal(0, 1, size=z_v.shape).to(device)
+                recon_loss = nn.functional.smooth_l1_loss(recon_video, video.view(video.size(0), video.size(1), -1))
+                kl_loss = kl_divergence_loss(mu, logvar).mean()
+                lc_loss = latent_classification_loss(z_v, z_g, model.latent_classifier)
+                loss = recon_loss + beta * kl_loss + lambda_lc * lc_loss
+                val_loss += loss.item()
+
+        avg_val_loss = val_loss / len(val_loader.dataset)
+        scheduler.step(avg_val_loss)
+
+        logging.info(f"Epoch {epoch+1} completed. Avg Loss: {epoch_loss/len(train_loader.dataset):.4f}")
+        logging.info(f"Validation Loss: {avg_val_loss:.4f} | Beta: {beta:.2f}")
+        logging.info(f"Learning Rate: {scheduler.optimizer.param_groups[0]['lr']}")
+
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            patience_counter = 0
+            model_save_path = os.path.join(CVAE_MODEL_PATH, "cvae.pth")
+            torch.save(model.state_dict(), model_save_path)
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                logging.info("Early stopping triggered.")
+                break
+
 def compute_mse(original, reconstructed):
     return torch.mean((original - reconstructed) ** 2).item()
-
-def compute_mae(original, reconstructed):
-    return torch.mean(torch.abs(original - reconstructed)).item()
-
-def compute_psnr(mse, max_val=1.0):
-    return 10 * torch.log10(max_val ** 2 / mse).item()
 
 def compute_ssim(original, reconstructed):
     original = original.cpu().numpy()
     reconstructed = reconstructed.cpu().numpy()
     ssim_val = 0
-    for i in range(original.shape[0]):  # Loop over batch
+    for i in range(original.shape[0]):  
         ssim_val += ssim(original[i], reconstructed[i], multichannel=True)
     return ssim_val / original.shape[0]
 
@@ -166,191 +236,20 @@ def evaluate_model(model, dataloader, device):
             condition = batch['condition'].to(device)
             recon_video, mu, logvar, _, z = model(video, condition)
             
-            # Compute metrics
             mse = compute_mse(video, recon_video)
             ssim_val = compute_ssim(video, recon_video)
             mse_values.append(mse)
             ssim_values.append(ssim_val)
             
-            # Collect latent vectors
             latent_vectors.append(z)
     
-    # Aggregate results
     avg_mse = np.mean(mse_values)
     avg_ssim = np.mean(ssim_values)
     latent_vectors = torch.cat(latent_vectors, dim=0)
     
-    logging.info(f"Average MSE: {avg_mse:.8f}")
-    logging.info(f"Average SSIM: {avg_ssim:.8f}")
+    logging.info(f"Average MSE: {avg_mse:.4f}")
+    logging.info(f"Average SSIM: {avg_ssim:.4f}")
     
-
-def train(model, train_loader, val_loader, device, num_epochs=100, lr=1e-3, beta_start=0.1, beta_max=1.0, lambda_lc=0):
-    logging.info("Starting training...")
-    
-    # Use AdamW with a slightly higher learning rate
-    optimizer = AdamW(model.parameters(), lr=3e-4, weight_decay=1e-4)      
-    scheduler = CosineAnnealingWarmRestarts(
-        optimizer, 
-        T_0=10,  # Initial restart period
-        T_mult=2,  # Multiplicative factor for restart
-        eta_min=1e-5  # Minimum learning rate
-    )
-        # Setup automatic mixed precision - always use if available
-    use_amp = torch.cuda.is_available() and hasattr(torch.cuda.amp, 'autocast') and hasattr(torch.cuda.amp, 'GradScaler')
-    scaler = amp.GradScaler() if use_amp else None
-    autocast = amp.autocast if use_amp else lambda: nullcontext()
-    
-    best_val_loss = float('inf')
-    max_patience = 15  # Reduced from 15
-    patience_counter = 0
-    
-    
-    # Compile model if using PyTorch 2.0+
-    if hasattr(torch, 'compile') and torch.cuda.is_available():
-        try:
-            model = torch.compile(model)
-            logging.info("Model successfully compiled with torch.compile()")
-        except Exception as e:
-            logging.warning(f"Could not compile model: {e}")
-
-    for epoch in range(num_epochs):
-        logging.info(f"\nEpoch {epoch+1}/{num_epochs}...")
-        epoch_loss = 0.0
-        warmup_epochs = 50 
-        if epoch < warmup_epochs:
-            beta = beta_start * (epoch / warmup_epochs)
-        else:
-            beta = beta_max
-
-        
-        model.train()
-        total_train_loss = 0
-        total_recon_loss = 0
-        total_kl_loss = 0
-        total_lc_loss = 0
-        
-        # Use tqdm for progress bar
-        with tqdm(total=len(train_loader), desc=f"Epoch {epoch+1}/{num_epochs}") as pbar:
-            for i, batch in enumerate(train_loader):
-                # Reduce memory check frequency
-                if i % 50 == 0:
-                    check_memory()
-                
-                optimizer.zero_grad(set_to_none=True)  # Faster than zero_grad()
-                video = batch['video'].to(device, non_blocking=True)
-                condition = batch['condition'].to(device, non_blocking=True)
-
-                # batch_size = video.size(0)
-                
-                if use_amp:
-                    with autocast():
-                        recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
-                        
-                        z_g = torch.randn_like(z_v)
-                            
-                        recon_loss = adaptive_reconstruction_loss(recon_video, video)
-                        kl_loss = improved_kl_divergence_loss(mu, logvar, beta)
-                        lc_loss = adaptive_latent_classification_loss(z_v, z_g, model.latent_classifier)
-                        loss = recon_loss + kl_loss + lambda_lc * lc_loss
-
-                    scaler.scale(loss).backward()
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
-                    
-                    z_g = torch.randn_like(z_v)
-                        
-                    recon_loss = adaptive_reconstruction_loss(recon_video, video)
-                    kl_loss = improved_kl_divergence_loss(mu, logvar, beta)
-                    lc_loss = adaptive_latent_classification_loss(z_v, z_g, model.latent_classifier)
-                    loss = recon_loss + kl_loss + lambda_lc * lc_loss
-                    
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                    optimizer.step()
-
-                total_train_loss += loss.item()
-                total_recon_loss += recon_loss.item()
-                total_kl_loss += kl_loss.item()
-                total_lc_loss += lc_loss.item()
-
-                pbar.update(1)
-                # Update progress bar
-                pbar.set_postfix({
-                    'loss': f'{loss.item():.4f}',
-                    'recon': f'{recon_loss.item():.4f}',
-                    'kl': f'{kl_loss.item():.4f}'
-                })
-                
-
-            scheduler.step()
-                
-        # Validation
-        total_val_loss = 0.0
-        model.eval()
-        
-        # Use torch.no_grad for validation (faster)
-        with torch.no_grad():
-            for batch in tqdm(val_loader, desc="Validation"):
-                video = batch['video'].to(device, non_blocking=True)
-                condition = batch['condition'].to(device, non_blocking=True)
-                
-                # batch_size = video.size(0)
-                
-                # Even in evaluation, we can use autocast for speed
-                if use_amp:
-                    with autocast():
-                        recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
-                        z_g = torch.randn_like(z_v)
-                        recon_loss = adaptive_reconstruction_loss(recon_video, video)
-                        kl_loss = improved_kl_divergence_loss(mu, logvar, beta)
-                        lc_loss = adaptive_latent_classification_loss(z_v, z_g, model.latent_classifier)
-                        
-                        val_loss = recon_loss + kl_loss + lambda_lc * lc_loss
-                        total_val_loss += val_loss.item()
-                else:
-                    recon_video, mu, logvar, attn_weights, z_v = model(video, condition)
-                    z_g = torch.randn_like(z_v)
-                    recon_loss = adaptive_reconstruction_loss(recon_video, video)
-                    kl_loss = improved_kl_divergence_loss(mu, logvar, beta)
-                    lc_loss = adaptive_latent_classification_loss(z_v, z_g, model.latent_classifier)
-                    
-                    val_loss = recon_loss + kl_loss + lambda_lc * lc_loss
-                    total_val_loss += val_loss.item()
-                    
-
-        avg_train_loss = total_train_loss / len(train_loader)
-        avg_recon_loss = total_recon_loss / len(train_loader)
-        avg_kl_loss = total_kl_loss / len(train_loader)
-        avg_lc_loss = total_lc_loss / len(train_loader)
-        avg_val_loss = total_val_loss / len(val_loader)
-        
-        logging.info(f"Epoch {epoch+1}: Train Loss {avg_train_loss:.8f}")
-        logging.info(f"Recon loss {avg_recon_loss:.8f} , Kl loss {avg_kl_loss:.8f} , LC loss {avg_lc_loss:.8f}")
-        logging.info(f"Val Loss {avg_val_loss:.8f} , Beta {beta:.8f}", )
-        
-        model_save_path = os.path.join(CVAE_MODEL_PATH, f"cvae{epoch+1}.pth")
-        torch.save(model.state_dict(), model_save_path)
-        logging.info(f"Model saved to {model_save_path}")
-        
-        # Save model and check early stopping
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            patience_counter = 0
-        else:
-            patience_counter += 1
-        
-        if patience_counter >= max_patience:
-            logging.info("Early stopping triggered.")
-            break
-        
-        # Force garbage collection
-        if epoch % 2 == 0:  # Less frequent GC
-            gc.collect()
-            torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
 
 
@@ -363,43 +262,19 @@ def main():
     logging.info("Initializing dataset...")
     dataset = LandmarkDataset(FINAL_JSONL_PATHS)
 
+    logging.info(f"Max frame count (sequence length): {MAX_FRAMES}")
+    logging.info("Vocabulary:", dataset.vocab)
+
+    logging.info("Initializing model...")
+
     train_size = int(0.9 * len(dataset))  
     val_size = len(dataset) - train_size  
 
-    # Create dataset splits
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
-    # Use more workers if available
-    num_workers = min(8, os.cpu_count() or 1)  # Increased from 4
-    logging.info(f"Using {num_workers} workers for data loading")
-    
-    # Initialize data loaders with performance optimizations
-    train_loader = DataLoader(
-        train_dataset, 
-        batch_size=CVAE_BATCH_SIZE, 
-        shuffle=True, 
-        num_workers=num_workers,
-        pin_memory=torch.cuda.is_available(),
-        drop_last=False,
-        prefetch_factor=PREFETCH_FACTOR if num_workers > 0 else None,
-        persistent_workers=True if num_workers > 0 else False
-    )
-    
-    val_loader = DataLoader(
-        val_dataset, 
-        batch_size=CVAE_BATCH_SIZE * 2,  # Larger batch size for validation
-        shuffle=False, 
-        num_workers=num_workers,
-        pin_memory=torch.cuda.is_available(),
-        drop_last=False,
-        prefetch_factor=PREFETCH_FACTOR if num_workers > 0 else None,
-        persistent_workers=True if num_workers > 0 else False
-    )
+    train_loader = DataLoader(train_dataset, batch_size=CVAE_BATCH_SIZE, shuffle=True, num_workers=0)
+    val_loader = DataLoader(val_dataset, batch_size=CVAE_BATCH_SIZE, shuffle=False, num_workers=0)
 
-    # Move to GPU before training if available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
-    # Initialize model and move to device
     model = ConditionalVAE(
         input_dim=CVAE_INPUT_DIM,
         hidden_dim=CVAE_HIDDEN_DIM,
@@ -409,23 +284,23 @@ def main():
         seq_len=MAX_FRAMES
     ).to(device)
 
-    # Log configuration
-    logging.info(f"Training on device: {device}")
-    logging.info(f"Using mixed precision: {torch.cuda.is_available() and hasattr(torch.cuda.amp, 'autocast')}")
-    logging.info(f"Dataset size: {len(dataset)}, Train: {train_size}, Val: {val_size}")
     logging.info("Model initialized. Starting training...")
 
-    # Train the model with a slightly higher learning rate
-    train(model, train_loader, val_loader, device, num_epochs=100, lr=1e-3)
+    input_shape = (CVAE_BATCH_SIZE, MAX_FRAMES, CVAE_INPUT_DIM)
+    cond_shape = (CVAE_BATCH_SIZE, EMBEDDING_DIM)
+    summary(model, input_size=[input_shape, cond_shape])
 
-    logging.info("Training completed. Running final evaluation...")
+
+    train(model, train_loader, val_loader, device, num_epochs=100, lr=0.001, beta_start=0.01, beta_max=4.0, lambda_lc=0.01)
+
+    logging.info("Model saved successfully ")
+
     
-    # input_shape = (CVAE_BATCH_SIZE, MAX_FRAMES, CVAE_INPUT_DIM)
-    # cond_shape = (CVAE_BATCH_SIZE, EMBEDDING_DIM)
-    # summary(model, input_size=[input_shape, cond_shape])
+    input_shape = (CVAE_BATCH_SIZE, MAX_FRAMES, CVAE_INPUT_DIM)
+    cond_shape = (CVAE_BATCH_SIZE, EMBEDDING_DIM)
+    summary(model, input_size=[input_shape, cond_shape])
 
     evaluate_model(model, val_loader, device)
 
 if __name__ == "__main__":
-    setup_logging("cvae_training")
     main()

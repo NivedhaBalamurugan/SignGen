@@ -64,8 +64,7 @@ def get_paths(chunk_index=0):
 FINAL_JSONL_PATHS = os.path.join(FINAL_PATH, "*.jsonl")
 
 # Model paths
-CGAN_MODEL_PATH = os.path.join(MODELS_PATH, "cgan_model")
-CGAN_GEN_PATH = os.path.join(CGAN_MODEL_PATH, "cgan_generator.keras")
+CGAN_MODEL_PATH = os.path.join(MODELS_PATH, "cgan_model", "checkpoints")
 CGAN_DIS_PATH = os.path.join(CGAN_MODEL_PATH, "cgan_discriminator.keras")
 CVAE_MODEL_PATH = os.path.join(MODELS_PATH, "cvae_model")
 STGCN_MODEL_PATH = os.path.join(MODELS_PATH, "stgcn_model")
@@ -80,7 +79,8 @@ CGAN_BATCH_SIZE = 64
 CGAN_EPOCHS = 100
 CGAN_LEARNING_RATE = 1e-4
 CGAN_LOG_INTERVAL = 10
-CGAN_NOISE_DIM = 50
+CGAN_NOISE_DIM = 20
+
 
 #CVAE parameters
 CVAE_INPUT_DIM = 98
@@ -95,7 +95,8 @@ HIDDEN_DIM = 128
 
 
 #Glove parameters
-EMBEDDING_DIM = 50
+EMBEDDING_DIM = 20
+WORD_NOT_FOUND = "before"
 
 def setup_logging(model):
     from datetime import datetime
@@ -103,7 +104,6 @@ def setup_logging(model):
     log_dir = os.path.join(BASE_PATH, "Logs")
     os.makedirs(log_dir, exist_ok=True)
     
-    # Add timestamp to log filename
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = os.path.join(log_dir, f"{model}_{timestamp}.log")
     
@@ -131,3 +131,13 @@ def setup_logging(model):
     logger.addHandler(console_handler)
     
     logging.info(f"Logging to: {log_file}")
+
+
+def get_cgan_path(word):
+    word_to_number = {"before": 12, "again": 9, "balance": 6, "argue": 10, "already": 11, "awkward": 11}
+    if word not in word_to_number:
+        number = 12 
+    else:
+        number = word_to_number[word]
+    CGAN_GEN_PATH = os.path.join(CGAN_MODEL_PATH, f"generator_epoch{number}.keras")
+    return CGAN_GEN_PATH

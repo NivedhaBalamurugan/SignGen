@@ -53,15 +53,12 @@ def process_data_batches(jsonl_files, word_embeddings):
 def gradient_penalty(discriminator, real_samples, fake_samples, word_vectors):
     batch_size = tf.shape(real_samples)[0]
     
-    # Generate random interpolation factors
     alpha = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
     
-    # Create interpolated samples between real and fake
     interpolated = real_samples + alpha * (fake_samples - real_samples)
     
     with tf.GradientTape() as tape:
         tape.watch(interpolated)
-        # Pass both the interpolated samples and word vectors to discriminator
         pred = discriminator([interpolated, word_vectors], training=True)
         
     gradients = tape.gradient(pred, interpolated)
@@ -119,73 +116,61 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     total_gen_loss = 0.0
     total_disc_loss = 0.0
     
-    # Define joint connections for bone length consistency
     joint_connections = [
-        # Upper body connections
-        (0, 1),  # Nose to neck
-        (1, 2),  # Neck to right shoulder
-        (1, 5),  # Neck to left shoulder
-        (2, 3),  # Right shoulder to right elbow
-        (5, 6),  # Left shoulder to left elbow
-        (3, 4),  # Right elbow to right wrist
-        (6, 7),  # Left elbow to left wrist
+        (0, 1),
+        (1, 2),
+        (1, 5),
+        (2, 3),
+        (5, 6),
+        (3, 4),
+        (6, 7),
         
-        # Left hand connections
-        (7, 8),   # Left wrist to left thumb CMC
-        (8, 9),   # Left thumb CMC to left thumb tip
-        (7, 10),  # Left wrist to left index MCP
-        (10, 11), # Left index MCP to left index tip
-        (7, 12),  # Left wrist to left middle MCP
-        (12, 13), # Left middle MCP to left middle tip
-        (7, 14),  # Left wrist to left ring MCP
-        (14, 15), # Left ring MCP to left ring tip
-        (7, 16),  # Left wrist to left pinky MCP
-        (16, 17), # Left pinky MCP to left pinky tip
+        (7, 8),
+        (8, 9),
+        (7, 10),
+        (10, 11),
+        (7, 12),
+        (12, 13),
+        (7, 14),
+        (14, 15),
+        (7, 16),
+        (16, 17),
         
-        # Right hand connections
-        (4, 18),  # Right wrist to right thumb MCP
-        (18, 19), # Right thumb MCP to right thumb tip
-        (4, 20),  # Right wrist to right index MCP
-        (20, 21), # Right index MCP to right index tip
-        (4, 22),  # Right wrist to right middle MCP
-        (22, 23), # Right middle MCP to right middle tip
-        (4, 24),  # Right wrist to right ring MCP
-        (24, 25), # Right ring MCP to right ring tip
-        (4, 26),  # Right wrist to right pinky MCP
-        (26, 27)  # Right pinky MCP to right pinky tip
+        (4, 18),
+        (18, 19),
+        (4, 20),
+        (20, 21),
+        (4, 22),
+        (22, 23),
+        (4, 24),
+        (24, 25),
+        (4, 26),
+        (26, 27)
     ]
-
-    # Define joint angle limits for anatomical plausibility
-    # Format: (joint1, joint2, joint3, min_angle, max_angle)
-    # Where joint2 is the vertex of the angle
+    
     joint_angle_limits = [
-        # Elbow angles
-        (2, 3, 4, 0, 160),   # Right elbow
-        (5, 6, 7, 0, 160),   # Left elbow
+        (2, 3, 4, 0, 160),
+        (5, 6, 7, 0, 160),
         
-        # Shoulder angles
-        (1, 2, 3, 0, 180),   # Right shoulder
-        (1, 5, 6, 0, 180),   # Left shoulder
+        (1, 2, 3, 0, 180),
+        (1, 5, 6, 0, 180),
         
-        # Wrist angles
-        (3, 4, 18, 0, 90),   # Right wrist to thumb base
-        (3, 4, 20, 0, 90),   # Right wrist to index base
-        (6, 7, 8, 0, 90),    # Left wrist to thumb base
-        (6, 7, 10, 0, 90),   # Left wrist to index base
+        (3, 4, 18, 0, 90),
+        (3, 4, 20, 0, 90),
+        (6, 7, 8, 0, 90),
+        (6, 7, 10, 0, 90),
         
-        # Left hand finger angles
-        (7, 8, 9, 0, 90),    # Left thumb angles
-        (7, 10, 11, 0, 90),  # Left index finger
-        (7, 12, 13, 0, 90),  # Left middle finger
-        (7, 14, 15, 0, 90),  # Left ring finger
-        (7, 16, 17, 0, 90),  # Left pinky finger
+        (7, 8, 9, 0, 90),
+        (7, 10, 11, 0, 90),
+        (7, 12, 13, 0, 90),
+        (7, 14, 15, 0, 90),
+        (7, 16, 17, 0, 90),
         
-        # Right hand finger angles
-        (4, 18, 19, 0, 90),  # Right thumb angles
-        (4, 20, 21, 0, 90),  # Right index finger
-        (4, 22, 23, 0, 90),  # Right middle finger
-        (4, 24, 25, 0, 90),  # Right ring finger
-        (4, 26, 27, 0, 90)   # Right pinky finger
+        (4, 18, 19, 0, 90),
+        (4, 20, 21, 0, 90),
+        (4, 22, 23, 0, 90),
+        (4, 24, 25, 0, 90),
+        (4, 26, 27, 0, 90)
     ]
 
     num_samples = word_vectors.shape[0]
@@ -206,7 +191,6 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         word_vector_batch = tf.cast(word_vector_batch, FP_PRECISION)
         generator_input = tf.concat([noise, word_vector_batch], axis=1)
 
-        # Train generator twice
         for _ in range(2):  
             with tf.GradientTape() as gen_tape:
                 generated_skeleton = generator(generator_input, training=True)
@@ -216,7 +200,6 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                 mask = create_mask(real_skeleton_batch)
                 mask = tf.reduce_mean(mask, axis=1, keepdims=True)
 
-                # Compute losses
                 fake_output = discriminator([generated_skeleton, word_vector_batch], training=True)
                 gen_adv_loss = generator_loss(fake_output)
                 mse_loss = tf.reduce_mean(tf.square(generated_skeleton - real_skeleton_batch))
@@ -232,14 +215,12 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                     4.0 * anatomical_loss  
                 )
 
-                # Apply mask to focus on valid joints
                 gen_loss = tf.reduce_sum(gen_loss * mask) / tf.reduce_sum(mask)
 
             generator_gradients = gen_tape.gradient(gen_loss, generator.trainable_variables)
             generator_gradients, _ = tf.clip_by_global_norm(generator_gradients, 1.0)
             generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
 
-        # Train discriminator once
         with tf.GradientTape() as disc_tape:
             generated_skeleton = generator(generator_input, training=False)
             real_output = discriminator([real_skeleton_batch, word_vector_batch], training=True)
@@ -249,7 +230,6 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             gp = gradient_penalty(discriminator, real_skeleton_batch, generated_skeleton, word_vector_batch)
             disc_loss = disc_adv_loss + 10.0 * gp
 
-            # Apply mask
             disc_loss = tf.reduce_sum(disc_loss * mask) / tf.reduce_sum(mask)
 
         discriminator_gradients = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
@@ -345,11 +325,10 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         epoch_gen_loss_value = epoch_gen_loss.result().numpy()
         epoch_disc_loss_value = epoch_disc_loss.result().numpy()
         
-        # Better approach to combined loss - use absolute values and weighting
         combined_loss = (
             0.2 * abs(epoch_gen_loss_value) + 
             0.3 * abs(epoch_disc_loss_value) + 
-            0.5 * epoch_mse_loss.result().numpy()  # Higher weight on reconstruction quality
+            0.5 * epoch_mse_loss.result().numpy()  
         )
 
         total_gen_loss += epoch_gen_loss_value
@@ -367,7 +346,6 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             #f"Semantic: {epoch_semantic_loss.result().numpy():.4f}"
         )
         
-        # Save checkpoint and history with detailed components
         current_history = {
             'total_gen_loss': total_gen_loss,
             'total_disc_loss': total_disc_loss,
@@ -390,7 +368,6 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             combined_loss
         )
         
-        # Update best model if loss improved
         if combined_loss < best_loss:
             logging.info(f"Loss improved from {best_loss:.4f} to {combined_loss:.4f}")
             best_loss = combined_loss
