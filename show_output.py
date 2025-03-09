@@ -111,10 +111,10 @@ def plot_a_frame_29_joints(J, filename):
         (0, 7), (7, 8),      # Finger 4
         (0, 9), (9, 10),     # Finger 5
     ]
-    
-    # Define body connections
-    upper_body_connections = [(0, 1), (1, 3), (0, 2), (0, 4), (1, 5), (4, 5)]
-    
+
+    # Define body connections, excluding indices 4 and 5
+    upper_body_connections = [(0, 1), (1, 3), (0, 2)]
+
     # Hand to body connections
     # body index 3 connected to hand index 11 (second hand palm)
     # body index 2 connected to hand index 0 (first hand palm)
@@ -134,9 +134,9 @@ def plot_a_frame_29_joints(J, filename):
         plt.scatter(J2[:11, 0], J2[:11, 1], color='blue', s=10, label="Left Hand")
         for start, end in single_hand_connections:
             plt.plot([J2[start, 0], J2[end, 0]],
-                     [J2[start, 1], J2[end, 1]],
-                     color='green', linewidth=1)
-    
+                    [J2[start, 1], J2[end, 1]],
+                    color='green', linewidth=1)
+
     # Plot right hand
     if right_hand_valid:
         plt.scatter(J2[11:22, 0], J2[11:22, 1], color='purple', s=10, label="Right Hand")
@@ -144,34 +144,35 @@ def plot_a_frame_29_joints(J, filename):
             start += 11
             end += 11
             plt.plot([J2[start, 0], J2[end, 0]],
-                     [J2[start, 1], J2[end, 1]],
-                     color='orange', linewidth=1)
-    
-    # Plot body landmarks
-    plt.scatter(J1[:, 0], J1[:, 1], color='red', s=15, label="Body Landmarks")
-    
-    # Plot body connections
+                    [J2[start, 1], J2[end, 1]],
+                    color='orange', linewidth=1)
+
+    # Plot body landmarks, excluding indices 4 and 5
+    body_indices_to_plot = [0, 1, 2, 3, 6]  # Exclude 4 and 5
+    plt.scatter(J1[body_indices_to_plot, 0], J1[body_indices_to_plot, 1], color='red', s=15, label="Body Landmarks")
+
+    # Plot body connections, excluding connections involving indices 4 and 5
     for start, end in upper_body_connections:
         plt.plot([J1[start, 0], J1[end, 0]],
-                 [J1[start, 1], J1[end, 1]],
-                 color='black', linewidth=2)
+                [J1[start, 1], J1[end, 1]],
+                color='black', linewidth=2)
 
     # Connect nose (body index 0) to midpoint of shoulders
     plt.plot([J1[6, 0], midpoint[0]], 
-         [J1[6, 1], midpoint[1]], 
-         color='black', linewidth=2, label="6th to Midpoint")
-    
+            [J1[6, 1], midpoint[1]], 
+            color='black', linewidth=2, label="6th to Midpoint")
+
     # Plot hand-to-body connections
     if left_hand_valid:
         plt.plot([J2[0, 0], J1[2, 0]],
-                 [J2[0, 1], J1[2, 1]],
-                 color='purple', linestyle="dashed", linewidth=1.5)
-    
+                [J2[0, 1], J1[2, 1]],
+                color='purple', linestyle="dashed", linewidth=1.5)
+
     if right_hand_valid:
         plt.plot([J2[11, 0], J1[3, 0]],
-                 [J2[11, 1], J1[3, 1]],
-                 color='purple', linestyle="dashed", linewidth=1.5)
-    
+                [J2[11, 1], J1[3, 1]],
+                color='purple', linestyle="dashed", linewidth=1.5)
+
     plt.gca().invert_yaxis()
     plt.title("2D Projected Hand & Body Landmarks with Connections")
     plt.axis("equal")
@@ -180,7 +181,6 @@ def plot_a_frame_29_joints(J, filename):
     plt.legend(loc="upper right")
     plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()
-
 
 def images_to_video_ffmpeg(image_folder, output_video, fps=30):
     os.system(f"ffmpeg -framerate {fps} -i {image_folder}/frame_%d.png -c:v libx264 -pix_fmt yuv420p {output_video}")
@@ -194,7 +194,10 @@ def save_generated_sequence(generated_sequence, frame_path, video_path):
         frame_array = np.array(frame)
         if np.all(frame_array == 0):
             continue  # Skip all-zero frames
-        plot_a_frame_29_joints(frame, f"{frame_path}/frame_{valid_frame_count}.png")
+        if(NUM_JOINTS == 49):
+            plot_a_frame(frame, f"{frame_path}/frame_{valid_frame_count}.png")
+        else:
+            plot_a_frame_29_joints(frame, f"{frame_path}/frame_{valid_frame_count}.png")
         valid_frame_count += 1
 
     logging.info(f"Saved {valid_frame_count} frames in '{frame_path}'")

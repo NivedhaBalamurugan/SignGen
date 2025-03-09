@@ -25,6 +25,5 @@ def log_training_config():
     logging.info("Training Configuration:")
     logging.info(f"Batch Size: {CGAN_BATCH_SIZE}")
     logging.info(f"Epochs: {CGAN_EPOCHS}")
-    logging.info(f"Learning Rate: {CGAN_LEARNING_RATE}")
     logging.info(f"Noise Dimension: {CGAN_NOISE_DIM}")
     logging.info(f"Max Frames: {MAX_FRAMES}")
