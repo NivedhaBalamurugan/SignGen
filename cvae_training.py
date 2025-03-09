@@ -137,6 +137,53 @@ class LandmarkDataset(Dataset):
         return sample
 
 
+def compute_mse(original, reconstructed):
+    return torch.mean((original - reconstructed) ** 2).item()
+
+def compute_mae(original, reconstructed):
+    return torch.mean(torch.abs(original - reconstructed)).item()
+
+def compute_psnr(mse, max_val=1.0):
+    return 10 * torch.log10(max_val ** 2 / mse).item()
+
+def compute_ssim(original, reconstructed):
+    original = original.cpu().numpy()
+    reconstructed = reconstructed.cpu().numpy()
+    ssim_val = 0
+    for i in range(original.shape[0]):  # Loop over batch
+        ssim_val += ssim(original[i], reconstructed[i], multichannel=True)
+    return ssim_val / original.shape[0]
+
+def evaluate_model(model, dataloader, device):
+
+    logging.info("Evaluating metris")
+    model.eval()
+    mse_values, ssim_values = [], []
+    latent_vectors = []
+    with torch.no_grad():
+        for batch in dataloader:
+            video = batch['video'].to(device)
+            condition = batch['condition'].to(device)
+            recon_video, mu, logvar, _, z = model(video, condition)
+            
+            # Compute metrics
+            mse = compute_mse(video, recon_video)
+            ssim_val = compute_ssim(video, recon_video)
+            mse_values.append(mse)
+            ssim_values.append(ssim_val)
+            
+            # Collect latent vectors
+            latent_vectors.append(z)
+    
+    # Aggregate results
+    avg_mse = np.mean(mse_values)
+    avg_ssim = np.mean(ssim_values)
+    latent_vectors = torch.cat(latent_vectors, dim=0)
+    
+    logging.info(f"Average MSE: {avg_mse:.8f}")
+    logging.info(f"Average SSIM: {avg_ssim:.8f}")
+    
+
 def train(model, train_loader, val_loader, device, num_epochs=100, lr=1e-3, beta_start=0.1, beta_max=1.0, lambda_lc=0):
     logging.info("Starting training...")
     
@@ -305,44 +352,6 @@ def train(model, train_loader, val_loader, device, num_epochs=100, lr=1e-3, beta
             gc.collect()
             torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
-
-
-
-# Simplified evaluation metrics with sampling
-def evaluate_model(model, dataloader, device, max_samples=500):
-    logging.info("Evaluating metrics (sample-based)...")
-    model.eval()
-    mse_values = []
-    sample_count = 0
-    
-    with torch.no_grad():
-        for batch in tqdm(dataloader, desc="Evaluating"):
-            video = batch['video'].to(device, non_blocking=True)
-            condition = batch['condition'].to(device, non_blocking=True)
-            
-            # Use autocast for evaluation too
-            if torch.cuda.is_available() and hasattr(torch.cuda.amp, 'autocast'):
-                with torch.cuda.amp.autocast():
-                    recon_video, mu, logvar, _, _ = model(video, condition)
-                    # Compute MSE
-                    mse = torch.mean((video.view(video.size(0), video.size(1), -1) - recon_video) ** 2, dim=[1, 2])
-            else:
-                recon_video, mu, logvar, _, _ = model(video, condition)
-                # Compute MSE
-                mse = torch.mean((video.view(video.size(0), video.size(1), -1) - recon_video) ** 2, dim=[1, 2])
-            
-            mse_values.append(mse.cpu())
-            
-            sample_count += video.size(0)
-            if sample_count > max_samples:
-                break
-    
-    # Aggregate results
-    mse_values = torch.cat(mse_values, dim=0)
-    avg_mse = torch.mean(mse_values).item()
-    
-    logging.info(f"Average MSE: {avg_mse:.8f}")
-    return {"mse": avg_mse}
 
 
 def main():

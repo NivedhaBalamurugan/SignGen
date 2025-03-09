@@ -2,68 +2,7 @@ import json
 import numpy as np  
 import show_output
 from config import *
-from utils.data_utils import select_sign_frames
-
-def add_noise(frame, noise_level=0.001, consistent_noise=None):
-    data_range = np.max(frame) - np.min(frame)
-    
-    # Scale the noise level relative to the data range
-    scaled_noise_level = noise_level * data_range
-    
-    if consistent_noise is not None:
-        # Use pre-generated consistent noise
-        noise = consistent_noise
-    else:
-        # Generate new Gaussian noise
-        noise = np.random.normal(0, scaled_noise_level, frame.shape)
-    
-    # Add noise to the frame
-    noisy_frame = frame + noise
-    
-    # Clamp values to ensure they stay within valid bounds (e.g., [0, 1] for normalized data)
-    noisy_frame = np.clip(noisy_frame, 0, 1)
-    
-    return noisy_frame, noise
-
-def distort_frame(frame, noise_level=0.1, body_noise=None):
-     # Split joints
-    upper = frame[:7]       # 0-6: Upper body
-    hand1 = frame[7:28]     # 7-27: Hand 1
-    hand2 = frame[28:49]    # 28-48: Hand 2
-
-    # Check if hands are present
-    hand1_present = not np.all(hand1 == 0)
-    hand2_present = not np.all(hand2 == 0)
-
-    # Add consistent noise to upper body (use pre-generated noise if available)
-    upper_noisy, body_noise = add_noise(upper, noise_level, consistent_noise=body_noise)
-
-    # Add independent noise to hands if they are present
-    hand1_noisy, _ = add_noise(hand1, noise_level) if hand1_present else (hand1, None)
-    hand2_noisy, _ = add_noise(hand2, noise_level) if hand2_present else (hand2, None)
-
-    # Combine back into a single frame
-    noisy_frame = np.vstack((upper_noisy, hand1_noisy, hand2_noisy))
-    return noisy_frame, body_noise
-
-def generate_cgan_output(key_frames, noise_level=0.1):
-    cgan_frames = []
-    body_noise = None  # Initialize consistent noise for body joints
-    
-    for frame in key_frames:
-        distorted_frame, body_noise = distort_frame(frame, noise_level, body_noise)
-        cgan_frames.append(distorted_frame)
-    return cgan_frames
-
-
-def generate_cvae_output(key_frames, noise_level=0.1):
-    cvae_frames = []
-    body_noise = None  # Initialize consistent noise for body joints
-    
-    for frame in key_frames:
-        distorted_frame, body_noise = distort_frame(frame, noise_level, body_noise)
-        cvae_frames.append(distorted_frame)
-    return cvae_frames
+# from utils.data_utils import select_sign_frames
 
 def read_jsonl_file(file_path):
     data = {}
@@ -79,30 +18,17 @@ def get_video(data, key):
     else:
         return None
 
-# Path to your JSONL file
-file_path = 'Dataset/landmarks/final/0_landmarks_top20_split1_aug.jsonl' 
-
-# Read the JSONL file
-data = read_jsonl_file(file_path)
-
-# Get the second video for the key "afternoon"
-video_data = get_video(data, 'before')
-
-if video_data is not None:
-    aug_video = np.array(video_data)  # Convert only if video_data is not None
-    print("Second video for 'afternoon':", aug_video.shape)
+def main(word):
+    file_path = 'Dataset/landmarks/final/0_landmarks_top20_split1_aug.jsonl' 
+    data = read_jsonl_file(file_path)
+    video_data = get_video(data, word)
+    key_frames = np.array(video_data)  
+    # key_frames = select_sign_frames(key_frames)# Convert only if video_data is not None
+    return key_frames
 
     # print(aug_video[1])
     # key_frames = select_sign_frames(aug_video)
     # show_output.save_generated_sequence(aug_video, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
-    cvae = generate_cvae_output(aug_video)
-    print("cave" , np.array(cvae).shape)
-    cgan = generate_cgan_output(aug_video)
-    print("cgan" , np.array(cgan).shape)
-    show_output.save_generated_sequence(cvae, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
-    show_output.save_generated_sequence(cgan, CGAN_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
-else:
-    print("Key 'afternoon' not found or does not have at least two videos.")
 
 
 

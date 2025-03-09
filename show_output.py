@@ -194,7 +194,7 @@ def save_generated_sequence(generated_sequence, frame_path, video_path):
         frame_array = np.array(frame)
         if np.all(frame_array == 0):
             continue  # Skip all-zero frames
-        plot_a_frame_29_joints(frame, f"{frame_path}/frame_{valid_frame_count}.png")
+        plot_a_frame(frame, f"{frame_path}/frame_{valid_frame_count}.png")
         valid_frame_count += 1
 
     logging.info(f"Saved {valid_frame_count} frames in '{frame_path}'")

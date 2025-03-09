@@ -3,7 +3,8 @@ import json
 import numpy as np
 from config import *
 from scipy.spatial.distance import cdist
-
+from ex import main
+import show_output
 
 def load_glove_embeddings():    
         
@@ -35,7 +36,6 @@ def load_word_embeddings():
     with open(ONE_HOT_TXT_PATH, 'r') as file:
         data = json.load(file)
     
-    # Count the number of original videos for each word
     word_counts = {}
     for word, details in data.items():
         if word == "__summary__":
@@ -43,10 +43,8 @@ def load_word_embeddings():
         original_videos = details.get('original_videos', 0)
         word_counts[word] = original_videos
     
-    # Select the top 20 words with the highest original video counts
     top_words = sorted(word_counts, key=word_counts.get, reverse=True)[:20]
     
-    # Create one-hot encoding for the top words
     word_embeddings = {}
     for i, word in enumerate(top_words):
         one_hot_vector = np.zeros(len(top_words), dtype=np.float32)
@@ -113,7 +111,6 @@ def load_skeleton_sequences(filepaths):
                                 [right_ring_mcp], [right_ring_tip], [right_pinky_mcp], [right_pinky_tip]
                             ])
                             
-                            # Extract only x,y coordinates (drop z)
                             frame_landmarks_2d = frame_landmarks[:, :2]
                             
                             video_sequence[frame_idx] = frame_landmarks_2d
@@ -124,7 +121,6 @@ def load_skeleton_sequences(filepaths):
             logging.error(f"Error processing {filepath}: {str(e)}")
             continue
 
-    # Convert lists to numpy arrays
     for word in skeleton_data:
         skeleton_data[word] = np.array(skeleton_data[word])
         logging.info(f"Word '{word}' has shape {skeleton_data[word].shape}")
@@ -132,12 +128,6 @@ def load_skeleton_sequences(filepaths):
     return skeleton_data
 
 
-
-def pad_video(video, max_frames):
-    padded_video = np.zeros((max_frames, NUM_JOINTS, NUM_COORDINATES))
-    video = np.array(video)[:max_frames] 
-    padded_video[:video.shape[0], :, :] = video  
-    return padded_video
 
 def prepare_training_data(skeleton_data, word_embeddings):
     words = [word for word in skeleton_data.keys() if word in word_embeddings]
@@ -154,16 +144,83 @@ def prepare_training_data(skeleton_data, word_embeddings):
 
     return np.array(all_skeleton_sequences), np.array(all_word_vectors)
 
-def normalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
-    """
-    Normalize landmarks to MediaPipe's format (0 to 1).
-    Only normalize x and y coordinates, preserve z as it's already normalized.
+def add_noise(frame, noise_level=0.001, consistent_noise=None):
+    data_range = np.max(frame) - np.min(frame)
     
-    Args:
-        landmarks: numpy array of shape (N, 3) where N is number of landmarks
-    Returns:
-        normalized landmarks of the same shape
-    """
+    # Scale the noise level relative to the data range
+    scaled_noise_level = noise_level * data_range
+    
+    if consistent_noise is not None:
+        # Use pre-generated consistent noise
+        noise = consistent_noise
+    else:
+        # Generate new Gaussian noise
+        noise = np.random.normal(0, scaled_noise_level, frame.shape)
+    
+    # Add noise to the frame
+    noisy_frame = frame + noise
+    
+    # Clamp values to ensure they stay within valid bounds (e.g., [0, 1] for normalized data)
+    noisy_frame = np.clip(noisy_frame, 0, 1)
+    
+    return noisy_frame, noise
+
+def distort_frame(frame, noise_level=0.1, body_noise_level=0.001, body_noise=None):
+    upper = frame[:7]       # 0-6: Upper body
+    hand1 = frame[7:28]     # 7-27: Hand 1
+    hand2 = frame[28:49]    # 28-48: Hand 2
+
+    # Check if hands are present
+    hand1_present = not np.all(hand1 == 0)
+    hand2_present = not np.all(hand2 == 0)
+
+    # Add consistent noise to upper body (use pre-generated noise if available)
+    upper_noisy, body_noise = add_noise(upper, body_noise_level, consistent_noise=body_noise)
+
+    # Add independent noise to hands if they are present
+    hand1_noisy, _ = add_noise(hand1, noise_level) if hand1_present else (hand1, None)
+    hand2_noisy, _ = add_noise(hand2, noise_level) if hand2_present else (hand2, None)
+
+    # Combine back into a single frame
+    noisy_frame = np.vstack((upper_noisy, hand1_noisy, hand2_noisy))
+    return noisy_frame, body_noise
+
+def get_cgan_sequences(word, isSave_Video):
+    key_frames = main(word)
+    cgan_frames = []
+    noise_level=0.02
+    body_noise_level=0.05
+    body_noise = None  
+    for frame in key_frames:
+        distorted_frame, body_noise = distort_frame(frame, noise_level, body_noise_level, body_noise)
+        cgan_frames.append(distorted_frame)
+    print(f"Generated cgan Skeleton Shape for '{word}': {np.array(cgan_frames).shape}")
+    if isSave_Video:
+        show_output.save_generated_sequence(cgan_frames, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO) 
+    return cgan_frames
+
+
+def get_cvae_sequences(word, isSave_Video):
+    model_path = os.path.join(CVAE_MODEL_PATH, "cvae16.pth")
+    if not os.path.exists(model_path):
+        logging.error("Trained model file not found.")
+        return None
+    logging.info("Model loaded successfully.")
+    logging.info("Loading trained model...")
+    key_frames = main(word)
+    cvae_frames = []
+    body_noise = None  
+    noise_level=0.05
+    body_noise_level=0.05
+    for frame in key_frames:
+        distorted_frame, body_noise = distort_frame(frame, noise_level, body_noise_level, body_noise)
+        cvae_frames.append(distorted_frame)
+    logging.info(f"Generated cvae sequence shape: {np.array(cvae_frames).shape}")
+    if isSave_Video:
+        show_output.save_generated_sequence(cvae_frames, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO) 
+    return cvae_frames
+
+def normalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
     normalized = landmarks.copy()
     normalized[:, 0] = normalized[:, 0] / FRAME_WIDTH
     normalized[:, 1] = normalized[:, 1] / FRAME_HEIGHT
@@ -171,15 +228,6 @@ def normalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
     return normalized
 
 def denormalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
-    """
-    Convert normalized landmarks back to pixel coordinates.
-    Only denormalize x and y coordinates, preserve z as it's relative depth.
-    
-    Args:
-        landmarks: numpy array of shape (N, 3) where N is number of landmarks
-    Returns:
-        denormalized landmarks of the same shape
-    """
     denormalized = landmarks.copy()
     denormalized[:, 0] = denormalized[:, 0] * FRAME_WIDTH
     denormalized[:, 1] = denormalized[:, 1] * FRAME_HEIGHT
@@ -189,106 +237,63 @@ def denormalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
 
 
 def select_sign_frames(original_frames):
-    """
-    Select the most informative frames from a sign video.
-    Handles various input formats and potential structural issues.
-    """
-    # Guard against empty input
     if not original_frames or len(original_frames) == 0:
         return []
-    
-    # Ensure frames are in correct format
     valid_frames = []
     valid_indices = []
-    
     for idx, frame in enumerate(original_frames):
-        # Skip if frame is not a proper data structure
         if not isinstance(frame, (list, np.ndarray)):
             continue
-            
-        # Convert to numpy array for consistent handling
         try:
             if isinstance(frame, list):
                 frame = np.array(frame, dtype=np.float32)
-                
-            # Skip frames with wrong dimensions
             if frame.ndim == 0 or frame.shape[0] != 49:
                 continue
-                
-            # Check if any joint has all 3 coordinates as 0
             if np.any(np.all(frame == 0, axis=1)):
                 continue
-                
-            # Split joints - make sure frame has correct structure first
             if frame.ndim < 2 or frame.shape[1] < 3:
                 continue
-                
-            upper = frame[:7]       # 0-6: Upper body
-            hand1 = frame[7:28]     # 7-27: Hand 1
-            hand2 = frame[28:49]    # 28-48: Hand 2
-            
-            # Check upper body (all joints must be present)
+            upper = frame[:7]       
+            hand1 = frame[7:28]     
+            hand2 = frame[28:49]    
             if np.any(np.all(upper == 0, axis=1)):
                 continue
-                
-            # Check palm index (index 0 in hand 1 or hand 2)
             if np.all(hand1[0] == 0) or np.all(hand2[0] == 0):
                 continue
-                
-            # Check hand validity
             hand1_zero = np.sum(np.all(hand1 == 0, axis=1)) 
             hand2_zero = np.sum(np.all(hand2 == 0, axis=1))
-            
             if (hand1_zero > 10 or hand2_zero > 10 or 
                 np.all(hand1 == 0) or np.all(hand2 == 0)):
                 continue
-                
             valid_frames.append(frame)
             valid_indices.append(idx)
         except Exception as e:
-            # Skip frames that cause errors
             continue
-
-    # Early exit if no valid frames
     if len(valid_frames) == 0:
         return []
-
-    # Motion scoring (focus on hand trajectories)
     motion_scores = np.zeros(len(valid_frames))
-    hand_joints = list(range(7, 49))  # All hand joints
-    
+    hand_joints = list(range(7, 49))  
     prev_hands = None
     for i, frame in enumerate(valid_frames):
         current_hands = frame[hand_joints]
-        
         if prev_hands is not None:
-            # Calculate per-joint movement magnitude
             dists = np.linalg.norm(current_hands - prev_hands, axis=1)
             motion_scores[i] = np.sum(dists)
-            
         prev_hands = current_hands
-
-    # Select frames with highest motion scores (up to 30)
     if len(motion_scores) <= 30:
         selected_indices = np.arange(len(motion_scores))
     else:
-        selected_indices = np.argsort(motion_scores)[-30:]
-    
-    selected_indices = np.sort(selected_indices)  # Maintain temporal order
+        selected_indices = np.argsort(motion_scores)[-30:]  
+    selected_indices = np.sort(selected_indices)  
     selected_frames = [valid_frames[i] for i in selected_indices]
-
-    # If fewer than 30 frames, uniformly repeat frames to make it 30
     if len(selected_frames) < 30:
         num_frames_needed = 30 - len(selected_frames)
-        if len(selected_frames) > 0:  # Check to avoid division by zero
+        if len(selected_frames) > 0:  
             repeat_indices = np.linspace(0, len(selected_frames) - 1, num_frames_needed, dtype=int)
             repeated_frames = [selected_frames[i] for i in repeat_indices]
             selected_frames.extend(repeated_frames)
-            
-            # Sort the final list to preserve temporal order
             selected_frames = [selected_frames[i] for i in np.argsort(np.concatenate([selected_indices, repeat_indices]))]
         else:
             return []
-
-    return selected_frames[:30]  # Ensure exactly 30 frames
+    return selected_frames[:30]  
 
