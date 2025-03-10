@@ -57,5 +57,5 @@ def get_cvae_sequence(asl_word, isSave_Video, CVAE_MODEL_PATH):
     return generated_skeleton
 
 if __name__ == "__main__":
-    INPUT_WORD = "already"
+    INPUT_WORD = "before"
     get_cvae_sequences(INPUT_WORD,1, main_c(INPUT_WORD,0))

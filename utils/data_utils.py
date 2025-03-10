@@ -143,7 +143,7 @@ def prepare_training_data(skeleton_data, word_embeddings):
 
     return np.array(all_skeleton_sequences), np.array(all_word_vectors)
 
-def add_noise(frame, noise_level=0.001, consistent_noise=None):
+def add_noise(frame, noise_level, consistent_noise=None):
     data_range = np.max(frame) - np.min(frame)
     scaled_noise_level = noise_level * data_range
     if consistent_noise is not None:
@@ -174,8 +174,8 @@ def get_cvae_sequences(word, isSave_Video, key_frames):
         return None
     cvae_frames = []
     body_noise = None  
-    noise_level=0.08
-    body_noise_level=0.001
+    noise_level=0.005
+    body_noise_level=0.0001
     for frame in key_frames:
         distorted_frame, body_noise = distort_frame(frame, noise_level, body_noise_level, body_noise)
         cvae_frames.append(distorted_frame)
