@@ -131,6 +131,8 @@ def plot_a_frame_29_joints(J, filename):
         plt.plot([J1[start, 0], J1[end, 0]],
                 [J1[start, 1], J1[end, 1]],
                 color='black', linewidth=2)
+                [J1[start, 1], J1[end, 1]],
+                color='black', linewidth=2)
 
     plt.plot([J1[6, 0], midpoint[0]], 
             [J1[6, 1], midpoint[1]], 
@@ -141,8 +143,14 @@ def plot_a_frame_29_joints(J, filename):
                 [J2[0, 1], J1[2, 1]],
                 color='purple', linestyle="dashed", linewidth=1.5)
 
+                [J2[0, 1], J1[2, 1]],
+                color='purple', linestyle="dashed", linewidth=1.5)
+
     if right_hand_valid:
         plt.plot([J2[11, 0], J1[3, 0]],
+                [J2[11, 1], J1[3, 1]],
+                color='purple', linestyle="dashed", linewidth=1.5)
+
                 [J2[11, 1], J1[3, 1]],
                 color='purple', linestyle="dashed", linewidth=1.5)
 
@@ -155,7 +163,6 @@ def plot_a_frame_29_joints(J, filename):
     plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()
 
-
 def images_to_video_ffmpeg(image_folder, output_video, fps=30):
     os.system(f"ffmpeg -framerate {fps} -i {image_folder}/frame_%d.png -c:v libx264 -pix_fmt yuv420p {output_video}")
 
@@ -167,6 +174,11 @@ def save_generated_sequence(generated_sequence, frame_path, video_path):
     for i, frame in enumerate(generated_sequence):
         frame_array = np.array(frame)
         if np.all(frame_array == 0):
+            continue  # Skip all-zero frames
+        if(NUM_JOINTS == 49):
+            plot_a_frame(frame, f"{frame_path}/frame_{valid_frame_count}.png")
+        else:
+            plot_a_frame_29_joints(frame, f"{frame_path}/frame_{valid_frame_count}.png")
             continue  
         plot_a_frame_29_joints(frame, f"{frame_path}/frame_{valid_frame_count}.png")
         valid_frame_count += 1
