@@ -10,7 +10,7 @@ class Attention(nn.Module):
     def forward(self, outputs, mask):
         scores = self.attn(outputs).squeeze(-1)
         scores = scores.masked_fill(mask == 0, -1e9)
-        attn_weights = torch.softmax(scores, dim=1) #hello
+        attn_weights = torch.softmax(scores, dim=1)
         context = torch.bmm(attn_weights.unsqueeze(1), outputs).squeeze(1)
         return context, attn_weights
 
