@@ -115,7 +115,7 @@ def bone_length_consistency_loss(skeletons, joint_connections):
         joint2 = skeletons[:, :, joint2_idx, :]  # [batch, frames, coordinates]
         
         # Calculate bone lengths for each frame
-        bone_lengths = tf.sqrt(tf.reduce_sum(tf.square(joint1 - joint2), axis=-1) + 1e-8)  # [batch, frames]
+        bone_lengths = tf.sqrt(tf.reduce_sum(tf.square(joint1 - joint2), axis=-1) + 1e-8) 
         
         # Calculate variance of bone length across frames (should be near 0)
         mean_lengths = tf.reduce_mean(bone_lengths, axis=1, keepdims=True)  # [batch, 1]
