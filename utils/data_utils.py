@@ -2,9 +2,6 @@ import os
 import json
 import numpy as np
 from config import *
-from scipy.spatial.distance import cdist
-from ex import main
-import show_output
 
 def load_glove_embeddings():    
         
@@ -143,45 +140,6 @@ def prepare_training_data(skeleton_data, word_embeddings):
 
     return np.array(all_skeleton_sequences), np.array(all_word_vectors)
 
-def add_noise(frame, noise_level, consistent_noise=None):
-    data_range = np.max(frame) - np.min(frame)
-    scaled_noise_level = noise_level * data_range
-    if consistent_noise is not None:
-        noise = consistent_noise
-    else:
-        noise = np.random.normal(0, scaled_noise_level, frame.shape)
-    noisy_frame = frame + noise
-    noisy_frame = np.clip(noisy_frame, 0, 1)
-    return noisy_frame, noise
-
-def distort_frame(frame, noise_level, body_noise_level, body_noise=None):
-    upper = frame[:7]       
-    hand1 = frame[7:28]     
-    hand2 = frame[28:49]    
-    hand1_present = not np.all(hand1 == 0)
-    hand2_present = not np.all(hand2 == 0)
-    upper_noisy, body_noise = add_noise(upper, noise_level, consistent_noise=body_noise)
-    hand1_noisy, _ = add_noise(hand1, noise_level) if hand1_present else (hand1, None)
-    hand2_noisy, _ = add_noise(hand2, noise_level) if hand2_present else (hand2, None)
-    noisy_frame = np.vstack((upper_noisy, hand1_noisy, hand2_noisy))
-    return noisy_frame, body_noise
-
-
-def get_cvae_sequences(word, isSave_Video, key_frames):
-    model_path = os.path.join(CVAE_MODEL_PATH, "cvae.pth")
-    if not os.path.exists(model_path):
-        logging.error("Trained model file not found.")
-        return None
-    cvae_frames = []
-    body_noise = None  
-    noise_level=0.005
-    body_noise_level=0.0001
-    for frame in key_frames:
-        distorted_frame, body_noise = distort_frame(frame, noise_level, body_noise_level, body_noise)
-        cvae_frames.append(distorted_frame)
-    if isSave_Video:
-        show_output.save_generated_sequence(cvae_frames, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO) 
-    return cvae_frames
 
 def normalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
     normalized = landmarks.copy()
@@ -202,7 +160,7 @@ def select_sign_frames(original_frames):
     if len(original_frames) == 0:
         return []
     valid_frames = []
-    valid_indices = []
+    
     for idx, frame in enumerate(original_frames):
         if not isinstance(frame, (list, np.ndarray)):
             continue
@@ -210,49 +168,34 @@ def select_sign_frames(original_frames):
             if isinstance(frame, list):
                 frame = np.array(frame, dtype=np.float32)
             if frame.ndim != 2 or frame.shape[0] != 49 or frame.shape[1] != 2:
-                continue
-            if np.any(np.all(frame == 0, axis=1)):
-                continue
-            upper = frame[:7]       # 0-6: Upper body
-            hand1 = frame[7:28]     # 7-27: Hand 1
-            hand2 = frame[28:49]    # 28-48: Hand 2
-            if np.any(np.all(upper == 0, axis=1)):
-                continue
-            if np.all(hand1[0] == 0) or np.all(hand2[0] == 0):
-                continue
-            hand1_zero = np.sum(np.all(hand1 == 0, axis=1)) 
-            hand2_zero = np.sum(np.all(hand2 == 0, axis=1))
-            if (hand1_zero > 10 or hand2_zero > 10 or 
-                np.all(hand1 == 0) or np.all(hand2 == 0)):
-                continue
+                continue           
             valid_frames.append(frame)
-            valid_indices.append(idx)
+                
         except Exception as e:
             continue
-    if len(valid_frames) == 0:
+    
+    if len(valid_frames) < 20:
         return []
-    motion_scores = np.zeros(len(valid_frames))
-    hand_joints = list(range(7, 49))  
-    prev_hands = None
-    for i, frame in enumerate(valid_frames):
-        current_hands = frame[hand_joints]
-        if prev_hands is not None:
-            dists = np.linalg.norm(current_hands - prev_hands, axis=1)
-            motion_scores[i] = np.sum(dists)
-        prev_hands = current_hands
-    if len(motion_scores) <= 30:
-        selected_indices = np.arange(len(motion_scores))
+    elif len(valid_frames) == 30:
+        return valid_frames
+    elif len(valid_frames) > 30:
+        indices = np.linspace(0, len(valid_frames) - 1, 30, dtype=int)
+        selected_frames = [valid_frames[i] for i in indices]        
+        return selected_frames
     else:
-        selected_indices = np.argsort(motion_scores)[-30:]
-    selected_indices = np.sort(selected_indices)  
-    selected_frames = [valid_frames[i] for i in selected_indices]
-    if len(selected_frames) < 30:
-        num_frames_needed = 30 - len(selected_frames)
-        if len(selected_frames) > 0: 
-            repeat_indices = np.linspace(0, len(selected_frames) - 1, num_frames_needed, dtype=int)
-            repeated_frames = [selected_frames[i] for i in repeat_indices]
-            selected_frames.extend(repeated_frames)
-            selected_frames = [selected_frames[i] for i in np.argsort(np.concatenate([selected_indices, repeat_indices]))]
-        else:
-            return []   
-    return selected_frames[:30]  
+        num_frames_needed = 30 - len(valid_frames)
+        repeat_indices = np.linspace(0, len(valid_frames) - 1, num_frames_needed, dtype=int)
+        insert_operations = []
+
+        for i in repeat_indices:
+            insert_operations.append((i + 1, valid_frames[i]))
+        insert_operations.sort(key=lambda x: x[0], reverse=True)
+        
+        result_frames = valid_frames.copy()
+        
+        for insert_idx, frame in insert_operations:
+            if insert_idx <= len(result_frames):
+                result_frames.insert(insert_idx, frame)
+            else:
+                result_frames.append(frame)        
+        return result_frames

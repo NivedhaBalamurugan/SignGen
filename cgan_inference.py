@@ -31,5 +31,5 @@ def main_c(INPUT_WORD, isSave):
     return get_cgan_sequence(INPUT_WORD,isSave, get_cgan_path(INPUT_WORD))
 
 if __name__ == "__main__":
-    INPUT_WORD = "again"
+    INPUT_WORD = "hi"
     main_c(INPUT_WORD,1)
