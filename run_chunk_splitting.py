@@ -49,7 +49,7 @@ def split_chunk_by_words(input_path, output_dir, words_per_split=WORDS_PER_SPLIT
 def main():
     # Get paths from config
     paths = get_paths(0)
-    input_path = f"{MERGED_PATH}/0_landmarks_top20.jsonl.gz"
+    input_path = f"Dataset\\new_landmarks\extracted_merged.jsonl.gz"
     
     # Create output directory next to input file
     output_dir = os.path.join(os.path.dirname(input_path), 'splits')

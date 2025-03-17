@@ -1,3 +1,4 @@
+import time
 import os
 import json
 import numpy as np
@@ -172,14 +173,14 @@ def main():
     target_videos = 6000
 
     # Setup logging
-    setup_logging(f"split_chunk_augmentation.log")
+    setup_logging(f"split_chunk_augmentation_{int(time.time())}.log")
 
     # Get paths
     paths = get_paths(0)
     input_dir = os.path.dirname(MERGED_PATH)
     
     # Find all input files matching the pattern
-    input_pattern = f"{MERGED_PATH}/splits/*.jsonl.gz"
+    input_pattern = f"Dataset\\new_landmarks\splits\*.jsonl.gz"
     input_files = glob.glob(input_pattern)
     
     if not input_files:
@@ -187,7 +188,7 @@ def main():
         return
 
     # Prepare output directory
-    output_dir = os.path.join(input_dir, f"split_augmentation_{MAX_FRAMES}_aug_fix")
+    output_dir = os.path.join(input_dir, f"split_augmentation")
     os.makedirs(output_dir, exist_ok=True)
 
     # Comprehensive stats to collect across all datasets

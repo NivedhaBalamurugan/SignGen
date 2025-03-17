@@ -3,6 +3,7 @@ Dataset/
 Models/
 Output*/
 Logs/
+old_*/
 
 [0-9]_body_landmarks.json
 [0-9]_body_landmarks.jsonl.gz
