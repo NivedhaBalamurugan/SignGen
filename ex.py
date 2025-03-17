@@ -26,7 +26,7 @@ def main(word):
     return frames
 
 if __name__ == "__main__":
-    video_data = main("many")
+    video_data = main("fine")
     frames = np.array(video_data)
     print(frames.shape)
     show_output.save_generated_sequence(frames, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO)      #without key frames    

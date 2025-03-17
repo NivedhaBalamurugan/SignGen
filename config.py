@@ -71,7 +71,7 @@ STGCN_MODEL_PATH = os.path.join(MODELS_PATH, "stgcn_model")
 
 # Model parameters
 MAX_FRAMES = 30
-NUM_JOINTS = 29
+NUM_JOINTS = 49
 NUM_COORDINATES = 2
 
 # CGAN parameters

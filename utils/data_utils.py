@@ -169,7 +169,23 @@ def select_sign_frames(original_frames):
                 frame = np.array(frame, dtype=np.float32)
             if frame.ndim != 2 or frame.shape[0] != 49 or frame.shape[1] != 2:
                 continue           
-            valid_frames.append(frame)
+
+            upper = frame[:7]       # 0-6: Upper body
+            hand1 = frame[7:28]     # 7-27: Hand 1
+            hand2 = frame[28:49]    # 28-48: Hand 2
+                
+            hand1_valid = not np.all(hand1[0] == 0)
+            hand2_valid = not np.all(hand2[0] == 0)
+            
+            hand1_zero = np.sum(np.all(hand1 == 0, axis=1)) 
+            hand2_zero = np.sum(np.all(hand2 == 0, axis=1))
+            
+            hand1_mostly_present = hand1_valid and hand1_zero <= 10 
+            hand2_mostly_present = hand2_valid and hand2_zero <= 10 
+            
+            if hand1_mostly_present or hand2_mostly_present:
+                valid_frames.append(frame)
+            # valid_frames.append(frame)
                 
         except Exception as e:
             continue
