@@ -71,7 +71,7 @@ STGCN_MODEL_PATH = os.path.join(MODELS_PATH, "stgcn_model")
 
 # Model parameters
 MAX_FRAMES = 30
-NUM_JOINTS = 49
+NUM_JOINTS = 29
 NUM_COORDINATES = 2
 
 # CGAN parameters
@@ -79,7 +79,7 @@ CGAN_BATCH_SIZE = 64
 CGAN_EPOCHS = 100
 CGAN_LEARNING_RATE = 1e-4
 CGAN_LOG_INTERVAL = 10
-CGAN_NOISE_DIM = 20
+CGAN_NOISE_DIM = 50
 
 
 #CVAE parameters
@@ -95,7 +95,7 @@ HIDDEN_DIM = 128
 
 
 #Glove parameters
-EMBEDDING_DIM = 20
+EMBEDDING_DIM = 50
 WORD_NOT_FOUND = "before"
 
 def setup_logging(model):

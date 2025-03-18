@@ -50,23 +50,19 @@ def process_data_batches(jsonl_files, word_embeddings):
             pbar.update(1)
     return total_sequences, total_vectors
 
-def gradient_penalty(discriminator, real_samples, fake_samples, word_vectors):
-    batch_size = tf.shape(real_samples)[0]
-    
-    alpha = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
-    
-    interpolated = real_samples + alpha * (fake_samples - real_samples)
-    
+def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors_expanded):
+    """Calculate gradient penalty for WGAN-GP"""
+    batch_size = tf.shape(real_skeletons)[0]
+    epsilon = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
+    epsilon = tf.tile(epsilon, [1, MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES])
+    interpolated = epsilon * real_skeletons + (1 - epsilon) * fake_skeletons
+    discriminator_input = tf.concat([interpolated, word_vectors_expanded], axis=-1)
     with tf.GradientTape() as tape:
-        tape.watch(interpolated)
-        pred = discriminator([interpolated, word_vectors], training=True)
-        
-    gradients = tape.gradient(pred, interpolated)
-    gradients_squared = tf.square(gradients)
-    gradients_squared_sum = tf.reduce_sum(gradients_squared, axis=[1, 2, 3])
-    gradient_l2_norm = tf.sqrt(gradients_squared_sum + 1e-8)
-    gradient_penalty = tf.reduce_mean(tf.square(gradient_l2_norm - 1.0))
-    
+        tape.watch(discriminator_input)
+        pred = discriminator(discriminator_input, training=True)
+    gradients = tape.gradient(pred, discriminator_input)
+    gradients_norm = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]) + 1e-8)
+    gradient_penalty = tf.reduce_mean((gradients_norm - 1.0) ** 2)
     return gradient_penalty
 
 def calculate_pkd(real_skeletons, generated_skeletons):
@@ -89,13 +85,13 @@ def calculate_diversity_score(generated_samples):
     diversity_score = np.mean(pairwise_distances)
     return diversity_score
 
-# def create_mask(real_skeleton_batch):
-#     mask = tf.reduce_sum(tf.abs(real_skeleton_batch), axis=-1) > 0  
-#     mask = tf.cast(mask, FP_PRECISION)  
-#     return mask  
+def create_mask(real_skeleton_batch):
+    mask = tf.reduce_sum(tf.abs(real_skeleton_batch), axis=-1) > 0  
+    mask = tf.cast(mask, FP_PRECISION)  
+    return mask  
 
 def save_model_checkpoint(generator, discriminator, history, epoch, loss):
-    checkpoint_dir = os.path.join(os.path.dirname(CGAN_GEN_PATH), f"checkpoints")
+    checkpoint_dir = os.path.join(os.path.dirname(CGAN_MODEL_PATH), f"checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
     gen_path = os.path.join(checkpoint_dir, f"generator_epoch{epoch}_loss{loss:.4f}.keras")
     generator.save(gen_path)
@@ -110,67 +106,79 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     if not validate_data_shapes(word_vectors, skeleton_sequences):
         return False
 
-    generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0005, beta_1=0.5, beta_2=0.9)
-    discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.00002, beta_1=0.5, beta_2=0.9)
+    generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5, beta_2=0.9)
+    discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5, beta_2=0.9)
 
     total_gen_loss = 0.0
     total_disc_loss = 0.0
     
+    # Define joint connections for bone length consistency
     joint_connections = [
-        (0, 1),
-        (1, 2),
-        (1, 5),
-        (2, 3),
-        (5, 6),
-        (3, 4),
-        (6, 7),
+        # Upper body connections
+        (0, 1),  # Nose to neck
+        (1, 2),  # Neck to right shoulder
+        (1, 5),  # Neck to left shoulder
+        (2, 3),  # Right shoulder to right elbow
+        (5, 6),  # Left shoulder to left elbow
+        (3, 4),  # Right elbow to right wrist
+        (6, 7),  # Left elbow to left wrist
         
-        (7, 8),
-        (8, 9),
-        (7, 10),
-        (10, 11),
-        (7, 12),
-        (12, 13),
-        (7, 14),
-        (14, 15),
-        (7, 16),
-        (16, 17),
+        # Left hand connections
+        (7, 8),   # Left wrist to left thumb CMC
+        (8, 9),   # Left thumb CMC to left thumb tip
+        (7, 10),  # Left wrist to left index MCP
+        (10, 11), # Left index MCP to left index tip
+        (7, 12),  # Left wrist to left middle MCP
+        (12, 13), # Left middle MCP to left middle tip
+        (7, 14),  # Left wrist to left ring MCP
+        (14, 15), # Left ring MCP to left ring tip
+        (7, 16),  # Left wrist to left pinky MCP
+        (16, 17), # Left pinky MCP to left pinky tip
         
-        (4, 18),
-        (18, 19),
-        (4, 20),
-        (20, 21),
-        (4, 22),
-        (22, 23),
-        (4, 24),
-        (24, 25),
-        (4, 26),
-        (26, 27)
+        # Right hand connections
+        (4, 18),  # Right wrist to right thumb MCP
+        (18, 19), # Right thumb MCP to right thumb tip
+        (4, 20),  # Right wrist to right index MCP
+        (20, 21), # Right index MCP to right index tip
+        (4, 22),  # Right wrist to right middle MCP
+        (22, 23), # Right middle MCP to right middle tip
+        (4, 24),  # Right wrist to right ring MCP
+        (24, 25), # Right ring MCP to right ring tip
+        (4, 26),  # Right wrist to right pinky MCP
+        (26, 27)  # Right pinky MCP to right pinky tip
     ]
-    
+
+    # Define joint angle limits for anatomical plausibility
+    # Format: (joint1, joint2, joint3, min_angle, max_angle)
+    # Where joint2 is the vertex of the angle
     joint_angle_limits = [
-        (2, 3, 4, 0, 160),
-        (5, 6, 7, 0, 160),
+        # Elbow angles
+        (2, 3, 4, 0, 160),   # Right elbow
+        (5, 6, 7, 0, 160),   # Left elbow
         
-        (1, 2, 3, 0, 180),
-        (1, 5, 6, 0, 180),
+        # Shoulder angles
+        (1, 2, 3, 0, 180),   # Right shoulder
+        (1, 5, 6, 0, 180),   # Left shoulder
         
-        (3, 4, 18, 0, 90),
-        (3, 4, 20, 0, 90),
-        (6, 7, 8, 0, 90),
-        (6, 7, 10, 0, 90),
+        # Wrist angles
+        (3, 4, 18, 0, 90),   # Right wrist to thumb base
+        (3, 4, 20, 0, 90),   # Right wrist to index base
+        (6, 7, 8, 0, 90),    # Left wrist to thumb base
+        (6, 7, 10, 0, 90),   # Left wrist to index base
         
-        (7, 8, 9, 0, 90),
-        (7, 10, 11, 0, 90),
-        (7, 12, 13, 0, 90),
-        (7, 14, 15, 0, 90),
-        (7, 16, 17, 0, 90),
+        # Left hand finger angles
+        (7, 8, 9, 0, 90),    # Left thumb angles
+        (7, 10, 11, 0, 90),  # Left index finger
+        (7, 12, 13, 0, 90),  # Left middle finger
+        (7, 14, 15, 0, 90),  # Left ring finger
+        (7, 16, 17, 0, 90),  # Left pinky finger
         
-        (4, 18, 19, 0, 90),
-        (4, 20, 21, 0, 90),
-        (4, 22, 23, 0, 90),
-        (4, 24, 25, 0, 90),
-        (4, 26, 27, 0, 90)
+        # Right hand finger angles
+        (4, 18, 19, 0, 90),  # Right thumb angles
+        (4, 20, 21, 0, 90),  # Right index finger
+        (4, 22, 23, 0, 90),  # Right middle finger
+        (4, 24, 25, 0, 90),  # Right ring finger
+        (4, 26, 27, 0, 90)   # Right pinky finger
     ]
 
     num_samples = word_vectors.shape[0]
@@ -183,60 +191,77 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     best_generator_weights = None
     best_discriminator_weights = None
 
-
     @tf.function
     def train_step(word_vector_batch, real_skeleton_batch):
         actual_batch_size = tf.shape(word_vector_batch)[0]
         noise = tf.random.normal([actual_batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
         word_vector_batch = tf.cast(word_vector_batch, FP_PRECISION)
         generator_input = tf.concat([noise, word_vector_batch], axis=1)
-
-        for _ in range(2):  
-            with tf.GradientTape() as gen_tape:
-                generated_skeleton = generator(generator_input, training=True)
-                generated_skeleton = tf.cast(generated_skeleton, FP_PRECISION)
-                real_skeleton_batch = tf.cast(real_skeleton_batch, FP_PRECISION)
-                
-                # mask = create_mask(real_skeleton_batch)
-                # mask = tf.reduce_mean(mask, axis=1, keepdims=True)
-
-                fake_output = discriminator([generated_skeleton, word_vector_batch], training=True)
-                gen_adv_loss = generator_loss(fake_output)
-                mse_loss = tf.reduce_mean(tf.square(generated_skeleton - real_skeleton_batch))
-                bone_loss = bone_length_consistency_loss(generated_skeleton, joint_connections)
-                motion_loss = motion_smoothness_loss(generated_skeleton)
-                anatomical_loss = anatomical_plausibility_loss(generated_skeleton, joint_angle_limits)
-                
-                gen_loss = (
-                    1.0 * gen_adv_loss + 
-                    5.0 * mse_loss +  
-                    12.0 * bone_loss +  
-                    10.0 * motion_loss +  
-                    4.0 * anatomical_loss  
-                )
-
-                gen_loss = tf.reduce_sum(gen_loss * mask) / tf.reduce_sum(mask)
-
-            generator_gradients = gen_tape.gradient(gen_loss, generator.trainable_variables)
-            generator_gradients, _ = tf.clip_by_global_norm(generator_gradients, 1.0)
-            generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
-
-        with tf.GradientTape() as disc_tape:
-            generated_skeleton = generator(generator_input, training=False)
-            real_output = discriminator([real_skeleton_batch, word_vector_batch], training=True)
-            fake_output = discriminator([generated_skeleton, word_vector_batch], training=True)
-
+    
+        with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+            generated_skeleton = generator(generator_input, training=True)
+            real_skeleton_batch = tf.cast(real_skeleton_batch, FP_PRECISION)
+            generated_skeleton = tf.cast(generated_skeleton, FP_PRECISION)
+            
+            mask = create_mask(real_skeleton_batch)
+            mask = tf.reduce_mean(mask, axis=1, keepdims=True)
+            
+            word_vector_expanded = tf.reshape(word_vector_batch, (actual_batch_size, 1, 1, EMBEDDING_DIM))
+            word_vector_expanded = tf.tile(word_vector_expanded, [1, 30, 29, 1])
+            
+            real_input = tf.concat([real_skeleton_batch, word_vector_expanded], axis=-1)
+            fake_input = tf.concat([generated_skeleton, word_vector_expanded], axis=-1)
+            
+            real_output = discriminator(real_input, training=True)
+            fake_output = discriminator(fake_input, training=True)
+            
+            # Basic adversarial losses
             disc_adv_loss = discriminator_loss(real_output, fake_output)
-            gp = gradient_penalty(discriminator, real_skeleton_batch, generated_skeleton, word_vector_batch)
+            gen_adv_loss = generator_loss(fake_output)
+            
+            # Gradient penalty for WGAN-GP
+            gp = gradient_penalty(discriminator, real_skeleton_batch, generated_skeleton, word_vector_expanded)
+            
+            # Additional generator losses
+            bone_loss = bone_length_consistency_loss(generated_skeleton, joint_connections)
+            motion_loss = motion_smoothness_loss(generated_skeleton)
+            anatomical_loss = anatomical_plausibility_loss(generated_skeleton, joint_angle_limits)
+            
+            # MSE reconstruction loss
+            mse_loss = tf.reduce_mean(tf.square(generated_skeleton - real_skeleton_batch))
+            
+            # Semantic loss to ensure similar words have similar motions
+            semantic_loss = semantic_consistency_loss(generated_skeleton, word_vector_batch)
+            
+            # Combine discriminator loss components
             disc_loss = disc_adv_loss + 10.0 * gp
-
+            
+            # Combine generator loss components with meaningful weights
+            # The key is to ensure these weights don't lead to components canceling each other
+            gen_loss = (
+                1.0 * gen_adv_loss +       # Adversarial loss
+                10.0 * mse_loss +          # Reconstruction loss (high weight)
+                5.0 * bone_loss +          # Bone length consistency
+                2.0 * motion_loss +        # Motion smoothness 
+                3.0 * anatomical_loss +    # Anatomical plausibility
+                2.0 * semantic_loss        # Semantic consistency
+            )
+            
+            # Apply mask to focus on valid joints
+            gen_loss = tf.reduce_sum(gen_loss * mask) / tf.reduce_sum(mask)
             disc_loss = tf.reduce_sum(disc_loss * mask) / tf.reduce_sum(mask)
-
+    
+        generator_gradients = gen_tape.gradient(gen_loss, generator.trainable_variables)
         discriminator_gradients = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
+        
+        # Clip gradients to prevent exploding gradients
+        generator_gradients, _ = tf.clip_by_global_norm(generator_gradients, 1.0)
         discriminator_gradients, _ = tf.clip_by_global_norm(discriminator_gradients, 1.0)
+        
+        generator_optimizer.apply_gradients(zip(generator_gradients, generator.trainable_variables))
         discriminator_optimizer.apply_gradients(zip(discriminator_gradients, discriminator.trainable_variables))
-
-        return gen_loss, disc_loss, gen_adv_loss, mse_loss, bone_loss, anatomical_loss, motion_loss
+        
+        return gen_loss, disc_loss, gen_adv_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss
 
     def get_model_weights(model):
         return [var.numpy() for var in model.weights]
@@ -253,7 +278,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         epoch_bone_loss = tf.keras.metrics.Mean()
         epoch_motion_loss = tf.keras.metrics.Mean()
         epoch_anatomical_loss = tf.keras.metrics.Mean()
-        #epoch_semantic_loss = tf.keras.metrics.Mean()
+        epoch_semantic_loss = tf.keras.metrics.Mean()
 
         for chunk_idx in range(chunks_per_epoch):
             chunk_start = chunk_idx * MAX_SAMPLES_PER_BATCH
@@ -276,7 +301,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                         batch_end = batch_start + batch_size
                         word_batch = word_vectors_chunk[batch_start:batch_end]
                         skeleton_batch = skeleton_sequences_chunk[batch_start:batch_end]
-                        gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, anatomical_loss, motion_loss = train_step(word_batch, skeleton_batch)
+                        gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss = train_step(word_batch, skeleton_batch)
                         
                         epoch_gen_loss.update_state(gen_loss)
                         epoch_disc_loss.update_state(disc_loss)
@@ -285,7 +310,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                         epoch_bone_loss.update_state(bone_loss)
                         epoch_motion_loss.update_state(motion_loss)
                         epoch_anatomical_loss.update_state(anatomical_loss)
-                        #epoch_semantic_loss.update_state(semantic_loss)
+                        epoch_semantic_loss.update_state(semantic_loss)
                         
                         pbar.set_postfix({
                             'gen_loss': f'{gen_loss:.4f}', 
@@ -303,7 +328,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                         batch_start = full_batches * batch_size
                         word_batch = word_vectors_chunk[batch_start:]
                         skeleton_batch = skeleton_sequences_chunk[batch_start:]
-                        gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, anatomical_loss, motion_loss = train_step(word_batch, skeleton_batch)
+                        gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss = train_step(word_batch, skeleton_batch)
                         
                         epoch_gen_loss.update_state(gen_loss)
                         epoch_disc_loss.update_state(disc_loss)
@@ -312,7 +337,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
                         epoch_bone_loss.update_state(bone_loss)
                         epoch_motion_loss.update_state(motion_loss)
                         epoch_anatomical_loss.update_state(anatomical_loss)
-                        #epoch_semantic_loss.update_state(semantic_loss)
+                        epoch_semantic_loss.update_state(semantic_loss)
                         
                         pbar.set_postfix({'gen_loss': f'{gen_loss:.4f}', 'disc_loss': f'{disc_loss:.4f}'})
                         pbar.update(1)
@@ -325,10 +350,11 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         epoch_gen_loss_value = epoch_gen_loss.result().numpy()
         epoch_disc_loss_value = epoch_disc_loss.result().numpy()
         
+        # Better approach to combined loss - use absolute values and weighting
         combined_loss = (
             0.2 * abs(epoch_gen_loss_value) + 
             0.3 * abs(epoch_disc_loss_value) + 
-            0.5 * epoch_mse_loss.result().numpy()  
+            0.5 * epoch_mse_loss.result().numpy()  # Higher weight on reconstruction quality
         )
 
         total_gen_loss += epoch_gen_loss_value
@@ -343,9 +369,10 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             f"Bone: {epoch_bone_loss.result().numpy():.4f}, "
             f"Motion: {epoch_motion_loss.result().numpy():.4f}, "
             f"Anatomical: {epoch_anatomical_loss.result().numpy():.4f}, "
-            #f"Semantic: {epoch_semantic_loss.result().numpy():.4f}"
+            f"Semantic: {epoch_semantic_loss.result().numpy():.4f}"
         )
         
+        # Save checkpoint and history with detailed components
         current_history = {
             'total_gen_loss': total_gen_loss,
             'total_disc_loss': total_disc_loss,
@@ -357,7 +384,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             'bone_loss': epoch_bone_loss.result().numpy(),
             'motion_loss': epoch_motion_loss.result().numpy(),
             'anatomical_loss': epoch_anatomical_loss.result().numpy(),
-            #'semantic_loss': epoch_semantic_loss.result().numpy()
+            'semantic_loss': epoch_semantic_loss.result().numpy()
         }
         
         gen_path, disc_path = save_model_checkpoint(
@@ -368,6 +395,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             combined_loss
         )
         
+        # Update best model if loss improved
         if combined_loss < best_loss:
             logging.info(f"Loss improved from {best_loss:.4f} to {combined_loss:.4f}")
             best_loss = combined_loss
@@ -393,7 +421,7 @@ def main():
     if not validate_config():
         return
 
-    os.makedirs(os.path.dirname(CGAN_GEN_PATH), exist_ok=True)
+    os.makedirs(os.path.dirname(CGAN_MODEL_PATH), exist_ok=True)
     os.makedirs(os.path.dirname(CGAN_DIS_PATH), exist_ok=True)
 
     word_embeddings = load_word_embeddings()
@@ -437,7 +465,7 @@ def main():
     try:
         success, history = train_gan(generator, discriminator, all_word_vectors, all_skeleton_sequences, epochs=CGAN_EPOCHS, batch_size=CGAN_BATCH_SIZE, patience=20)
         if success:
-            save_model_and_history(CGAN_GEN_PATH, generator, history)
+            save_model_and_history(CGAN_MODEL_PATH, generator, history)
             save_model_and_history(CGAN_DIS_PATH, discriminator)
             generated_skeletons = generator(all_word_vectors)
             real_skeletons = all_skeleton_sequences

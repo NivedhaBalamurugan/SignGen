@@ -13,12 +13,21 @@ def load_glove_embeddings():
     try:
         with open(GLOVE_TXT_PATH, encoding="utf8") as file:
             for line in file:
+                line = line.strip()  # Remove leading/trailing whitespace
+                if not line:  # Skip empty lines
+                    continue
+                    
                 values = line.split()
+                if len(values) <= 1:  # Skip lines without embeddings
+                    continue
+                    
                 word = values[0]
                 vector = np.asarray(values[1:], dtype=FP_PRECISION)
                 word_embeddings[word] = vector
+                
         logging.info(f"Loaded {len(word_embeddings)} word embeddings")
         return word_embeddings
+        
     except Exception as e:
         logging.error(f"Error loading word embeddings: {e}")
         return None
