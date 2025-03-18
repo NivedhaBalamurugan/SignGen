@@ -59,7 +59,7 @@ def load_word_embeddings():
     
     return word_embeddings
 
-def load_skeleton_sequences(filepaths):
+def load_skeleton_sequences(filepaths, convert_to_segments=True):
     skeleton_data = {}
     
     for filepath in filepaths:
@@ -127,12 +127,17 @@ def load_skeleton_sequences(filepaths):
             logging.error(f"Error processing {filepath}: {str(e)}")
             continue
 
+    # Convert to numpy arrays
     for word in skeleton_data:
         skeleton_data[word] = np.array(skeleton_data[word])
         logging.info(f"Word '{word}' has shape {skeleton_data[word].shape}")
     
+    # Convert to line segments if requested
+    if convert_to_segments:
+        skeleton_data, num_segments = convert_skeleton_to_line_segments(skeleton_data)
+        logging.info(f"Converted to line segments representation with {num_segments} segments per frame")
+    
     return skeleton_data
-
 
 
 def prepare_training_data(skeleton_data, word_embeddings):
@@ -224,3 +229,62 @@ def select_sign_frames(original_frames):
             else:
                 result_frames.append(frame)        
         return result_frames
+    
+joint_connections = [
+        # Upper body connections
+        (0, 1),  # Nose to neck
+        (1, 2),  # Neck to right shoulder
+        (1, 5),  # Neck to left shoulder
+        (2, 3),  # Right shoulder to right elbow
+        (5, 6),  # Left shoulder to left elbow
+        (3, 4),  # Right elbow to right wrist
+        (6, 7),  # Left elbow to left wrist
+        
+        # Left hand connections
+        (7, 8),   # Left wrist to left thumb CMC
+        (8, 9),   # Left thumb CMC to left thumb tip
+        (7, 10),  # Left wrist to left index MCP
+        (10, 11), # Left index MCP to left index tip
+        (7, 12),  # Left wrist to left middle MCP
+        (12, 13), # Left middle MCP to left middle tip
+        (7, 14),  # Left wrist to left ring MCP
+        (14, 15), # Left ring MCP to left ring tip
+        (7, 16),  # Left wrist to left pinky MCP
+        (16, 17), # Left pinky MCP to left pinky tip
+        
+        # Right hand connections
+        (4, 18),  # Right wrist to right thumb MCP
+        (18, 19), # Right thumb MCP to right thumb tip
+        (4, 20),  # Right wrist to right index MCP
+        (20, 21), # Right index MCP to right index tip
+        (4, 22),  # Right wrist to right middle MCP
+        (22, 23), # Right middle MCP to right middle tip
+        (4, 24),  # Right wrist to right ring MCP
+        (24, 25), # Right ring MCP to right ring tip
+        (4, 26),  # Right wrist to right pinky MCP
+        (26, 27)  # Right pinky MCP to right pinky tip
+    ]
+    
+
+def convert_skeleton_to_line_segments(skeleton_data):
+    num_segments = len(joint_connections)
+    line_segment_data = {}
+    
+    for word, videos in skeleton_data.items():
+        num_videos = videos.shape[0]
+        
+        line_segments = np.zeros((num_videos, 30, num_segments, 2, 2))
+        
+        for video_idx in range(num_videos):
+            for frame_idx in range(30):
+                for segment_idx, (joint1_idx, joint2_idx) in enumerate(joint_connections):
+                    
+                    joint1 = videos[video_idx, frame_idx, joint1_idx]
+                    joint2 = videos[video_idx, frame_idx, joint2_idx]
+                    
+                    line_segments[video_idx, frame_idx, segment_idx, 0] = joint1
+                    line_segments[video_idx, frame_idx, segment_idx, 1] = joint2
+        
+        line_segment_data[word] = line_segments
+    
+    return line_segment_data, num_segments
