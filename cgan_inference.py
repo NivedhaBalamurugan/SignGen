@@ -6,10 +6,17 @@ import show_output
 from config import *
 from utils.data_utils import load_word_embeddings
 
-def generate_skeleton_sequence(word, generator):
+INPUT_WORD = "fine"
+
+generator = tf.keras.models.load_model("Models\cgan_model\checkpoints\generator_epoch12_loss0.6055.keras")
+
+
+def generate_skeleton_sequence(word):
     word_embeddings = load_word_embeddings()
     if word not in word_embeddings:
-        word=WORD_NOT_FOUND
+        print(f"Word '{word}' not found in embeddings.")
+        return None
+
     word_vector = np.array(word_embeddings[word], dtype=np.float32).reshape(1, -1)
     noise = tf.random.normal([1, CGAN_NOISE_DIM], dtype=tf.float32)
     generator_input = tf.concat([noise, word_vector], axis=1)
@@ -17,19 +24,19 @@ def generate_skeleton_sequence(word, generator):
     generated_skeleton = generator(generator_input, training=False).numpy()
     return generated_skeleton.squeeze()
 
-def get_cgan_sequence(word, isSave_Video, model_path):
-    generator = tf.keras.models.load_model(model_path)
-    generated_sequence = generate_skeleton_sequence(word, generator)
+def get_cgan_sequence(word, isSave_Video):
+    generated_sequence = generate_skeleton_sequence(word)
     if generated_sequence is not None:
         print(f"Generated Skeleton Shape for '{word}': {generated_sequence.shape}")
+        save_path = OUTPUTS_PATH
+        os.makedirs(save_path, exist_ok=True)
+        json_filepath = os.path.join(save_path, f"generated_skeleton_{word}.json")
+        with open(json_filepath, 'w') as json_file:
+            json.dump(generated_sequence.tolist(), json_file)
+            print("Saved successfully")
         if isSave_Video:
             show_output.save_generated_sequence(generated_sequence, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO) 
     return generated_sequence
 
-
-def main_c(INPUT_WORD, isSave):
-    return get_cgan_sequence(INPUT_WORD,isSave, get_cgan_path(INPUT_WORD))
-
 if __name__ == "__main__":
-    INPUT_WORD = "hi"
-    main_c(INPUT_WORD,1)
+    get_cgan_sequence(INPUT_WORD,1)
