@@ -56,11 +56,11 @@ def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors
     epsilon = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
     epsilon = tf.tile(epsilon, [1, MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES])
     interpolated = epsilon * real_skeletons + (1 - epsilon) * fake_skeletons
-    discriminator_input = tf.concat([interpolated, word_vectors_expanded], axis=-1)
+    #discriminator_input = tf.concat([interpolated, word_vectors_expanded], axis=-1)
     with tf.GradientTape() as tape:
-        tape.watch(discriminator_input)
-        pred = discriminator(discriminator_input, training=True)
-    gradients = tape.gradient(pred, discriminator_input)
+        tape.watch(interpolated)
+        pred = discriminator([interpolated,word_vectors_expanded], training=True)
+    gradients = tape.gradient(pred, interpolated)
     gradients_norm = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]) + 1e-8)
     gradient_penalty = tf.reduce_mean((gradients_norm - 1.0) ** 2)
     return gradient_penalty
@@ -140,8 +140,9 @@ def train_gan_segments(generator, discriminator, word_vectors, skeleton_segments
             real_input = tf.concat([real_skeleton_batch, word_vector_expanded], axis=4)
             fake_input = tf.concat([generated_skeleton, word_vector_expanded], axis=4)
             
-            real_output = discriminator(real_input, training=True)
-            fake_output = discriminator(fake_input, training=True)
+          
+            real_output = discriminator([real_skeleton_batch, word_vector_batch], training=True)
+            fake_output = discriminator([generated_skeleton, word_vector_batch], training=True)
             
             # Adversarial losses
             disc_adv_loss = discriminator_loss(real_output, fake_output)
