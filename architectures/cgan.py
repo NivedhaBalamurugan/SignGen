@@ -29,11 +29,14 @@ def build_generator(num_segments):
     return Model(inputs, outputs)
 
 def build_discriminator(num_segments):
-    input_shape = (MAX_FRAMES, num_segments, 2, NUM_COORDINATES + EMBEDDING_DIM)
-    inputs = Input(shape=input_shape)
+    # Skeleton input
+    skeleton_input = Input(shape=(MAX_FRAMES, num_segments, 2, NUM_COORDINATES))
+    # Word embedding input
+    embedding_input = Input(shape=(EMBEDDING_DIM,))
     
-    reshape_size = num_segments * 2 * (NUM_COORDINATES + EMBEDDING_DIM)
-    x = Reshape((MAX_FRAMES, reshape_size))(inputs)
+    # Process skeleton input
+    reshape_size = num_segments * 2 * NUM_COORDINATES
+    x = Reshape((MAX_FRAMES, reshape_size))(skeleton_input)
     
     x = Conv1D(128, kernel_size=5, strides=1, padding='same')(x)
     x = LeakyReLU(0.2)(x)
@@ -48,7 +51,13 @@ def build_discriminator(num_segments):
     x = Bidirectional(GRU(128, return_sequences=True))(x)
     x = Bidirectional(GRU(128, return_sequences=False))(x)
     
-    x = Dense(256, activation="relu")(x)
+    # Expand and tile the embedding to combine with the skeleton features
+    embedding_expanded = Dense(256, activation="relu")(embedding_input)
+    
+    # Concatenate skeleton features with word embedding
+    combined = tf.concat([x, embedding_expanded], axis=-1)
+    
+    x = Dense(256, activation="relu")(combined)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
     x = Dense(128, activation="relu")(x)
@@ -56,8 +65,7 @@ def build_discriminator(num_segments):
     x = Dropout(0.3)(x)
     outputs = Dense(1)(x)
     
-    return Model(inputs, outputs)
-
+    return Model([skeleton_input, embedding_input], outputs)
 def generator_loss(fake_output):
     return -tf.reduce_mean(fake_output)
 
