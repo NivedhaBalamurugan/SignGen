@@ -1,7 +1,7 @@
 import tensorflow as tf
 from keras.layers import GRU, Dense, Input, Reshape, TimeDistributed, Bidirectional, UpSampling1D
 from keras.models import Model
-from keras.layers import GRU, Dense, Input, Dropout, BatchNormalization, Reshape, Conv1D, LeakyReLU
+from keras.layers import Dropout, BatchNormalization, Conv1D, LeakyReLU, Concatenate
 from config import *
 
 def build_generator(num_segments):
