@@ -55,7 +55,7 @@ def build_discriminator(num_segments):
     embedding_expanded = Dense(256, activation="relu")(embedding_input)
     
     # Concatenate skeleton features with word embedding
-    combined = tf.concat([x, embedding_expanded], axis=-1)
+    combined = Concatenate(axis=-1)([x, embedding_expanded])
     
     x = Dense(256, activation="relu")(combined)
     x = BatchNormalization()(x)
