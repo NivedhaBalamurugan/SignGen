@@ -7,8 +7,9 @@ from config import *
 from utils.data_utils import convert_line_segments_to_skeleton, load_word_embeddings
 
 INPUT_WORD = "book"
-
-generator = tf.keras.models.load_model("generator_epoch63_loss0.0385.keras")
+MODEL_NAME = "specific_name"
+EPOCH_NO = "18"
+generator = tf.keras.models.load_model("Models\cgan_model\checkpoints_specific_name\generator_epoch18_loss0.0100.keras")
 
 
 def generate_skeleton_sequence(word):
@@ -40,7 +41,8 @@ def get_cgan_sequence(word, isSave_Video):
             print("Saved successfully")
             
         if isSave_Video:
-            show_output.save_generated_sequence(skeleton_sequence, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO) 
+            frames_path = os.path.join(OUTPUTS_PATH, f"cgan_{MODEL_NAME}_e{EPOCH_NO}_{INPUT_WORD}")
+            show_output.save_generated_sequence(skeleton_sequence, frames_path, CGAN_OUTPUT_VIDEO) 
     return skeleton_sequence
 
 if __name__ == "__main__":

@@ -13,6 +13,8 @@ from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import *
 from scipy.stats import entropy
 
+MODEL_NAME = "specific_name"
+
 FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000
 MEMORY_THRESHOLD = 85
@@ -91,7 +93,7 @@ def create_mask(real_skeleton_batch):
     return mask  
 
 def save_model_checkpoint(generator, discriminator, history, epoch, loss):
-    checkpoint_dir = os.path.join(os.path.dirname(CGAN_MODEL_PATH), f"checkpoints")
+    checkpoint_dir = os.path.join(os.path.dirname(CGAN_MODEL_PATH), f"checkpoints_{MODEL_NAME}")
     os.makedirs(checkpoint_dir, exist_ok=True)
     gen_path = os.path.join(checkpoint_dir, f"generator_epoch{epoch}_loss{loss:.4f}.keras")
     generator.save(gen_path)
