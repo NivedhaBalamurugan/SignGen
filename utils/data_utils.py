@@ -231,39 +231,34 @@ def load_skeleton_sequences(filepaths, convert_to_segments=True):
 
 joint_connections = [
         # Upper body connections
-        (0, 1),  # Nose to neck
-        (1, 2),  # Neck to right shoulder
-        (1, 5),  # Neck to left shoulder
-        (2, 3),  # Right shoulder to right elbow
-        (5, 6),  # Left shoulder to left elbow
-        (3, 4),  # Right elbow to right wrist
-        (6, 7),  # Left elbow to left wrist
+        (0,1) , (1,3) , (0,2) , (1,5) , (0,4) , 
         
+        (3,7) , (2,18) , 
         # Left hand connections
-        (7, 8),   # Left wrist to left thumb CMC
-        (8, 9),   # Left thumb CMC to left thumb tip
-        (7, 10),  # Left wrist to left index MCP
-        (10, 11), # Left index MCP to left index tip
-        (7, 12),  # Left wrist to left middle MCP
-        (12, 13), # Left middle MCP to left middle tip
-        (7, 14),  # Left wrist to left ring MCP
-        (14, 15), # Left ring MCP to left ring tip
-        (7, 16),  # Left wrist to left pinky MCP
-        (16, 17), # Left pinky MCP to left pinky tip
+        (7, 8),   
+        (8, 9),   
+        (7, 10),  
+        (10, 11), 
+        (7, 12),  
+        (12, 13), 
+        (7, 14),  
+        (14, 15), 
+        (7, 16),  
+        (16, 17),
         
         # Right hand connections
-        (4, 18),  # Right wrist to right thumb MCP
-        (18, 19), # Right thumb MCP to right thumb tip
-        (4, 20),  # Right wrist to right index MCP
-        (20, 21), # Right index MCP to right index tip
-        (4, 22),  # Right wrist to right middle MCP
-        (22, 23), # Right middle MCP to right middle tip
-        (4, 24),  # Right wrist to right ring MCP
-        (24, 25), # Right ring MCP to right ring tip
-        (4, 26),  # Right wrist to right pinky MCP
-        (26, 27)  # Right pinky MCP to right pinky tip
+        (18, 19), 
+        (19, 20),  
+        (18, 21), 
+        (21, 22),  
+        (18, 23), 
+        (23, 24),  
+        (18, 25), 
+        (25, 26),  
+        (18, 27),
+        (27, 28)  
     ]
-    
+        
 
 def convert_skeleton_to_line_segments(skeleton_data):
     num_segments = len(joint_connections)
@@ -287,6 +282,7 @@ def convert_skeleton_to_line_segments(skeleton_data):
         line_segment_data[word] = line_segments
     
     return line_segment_data, num_segments
+
 
 def convert_line_segments_to_skeleton(line_segment_data):
     skeleton_data = {}
@@ -316,3 +312,24 @@ def convert_line_segments_to_skeleton(line_segment_data):
         skeleton_data[word] = skeletons
     
     return skeleton_data
+
+def convert_line_segments_to_skeleton_cvae(line_segment_data):
+    num_frames, num_segments, num_joints, num_coords = line_segment_data.shape
+    num_joints_total = 29  # Total joints in skeleton
+    skeletons = np.zeros((num_frames, num_joints_total, num_coords))  
+
+    for frame_idx in range(num_frames):
+        joint_positions = {}
+
+        for segment_idx, (joint1_idx, joint2_idx) in enumerate(joint_connections):
+            joint1_pos = line_segment_data[frame_idx, segment_idx, 0, :]  # (x, y) of joint1
+            joint2_pos = line_segment_data[frame_idx, segment_idx, 1, :]  # (x, y) of joint2
+
+            joint_positions[joint1_idx] = joint1_pos
+            joint_positions[joint2_idx] = joint2_pos
+
+        for joint_idx in range(num_joints_total):
+            if joint_idx in joint_positions:
+                skeletons[frame_idx, joint_idx] = joint_positions[joint_idx]
+
+    return skeletons
