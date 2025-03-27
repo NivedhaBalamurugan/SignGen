@@ -7,13 +7,13 @@ import tensorflow as tf
 from tqdm import tqdm
 from config import *
 from utils.data_utils import load_skeleton_sequences, load_word_embeddings, prepare_training_data, joint_connections
-from utils.validation_utils import validate_data_shapes, validate_config
+from utils.validation_utils import validate_config
 from utils.model_utils import save_model_and_history, log_model_summary, log_training_config
 from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import *
 from scipy.stats import entropy
 
-MODEL_NAME = "specific_name"
+MODEL_NAME = ""
 
 FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000

@@ -4,7 +4,7 @@ import orjson
 from collections import defaultdict
 from config import logging
 
-def load_jsonl_gz(file_path, single_object=False):
+def load_jsonl_gz(file_path, single_object=True):
     logging.info(f"Loading JSONL file: {file_path}")
     data = defaultdict(list)
     if not os.path.exists(file_path):
@@ -23,7 +23,7 @@ def load_jsonl_gz(file_path, single_object=False):
         logging.error(f"Error loading JSONL file: {file_path}, Error: {e}")
     return data
 
-def save_jsonl_gz(file_path, data, single_object=False):
+def save_jsonl_gz(file_path, data, single_object=True):
     logging.info(f"Saving JSONL file: {file_path}")
     try:
         with gzip.open(file_path, "wb") as f:

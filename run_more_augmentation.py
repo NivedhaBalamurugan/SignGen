@@ -32,11 +32,17 @@ def augment_dataset(input_path, output_path, target_videos=100):
         }
 
         for word, videos in data.items():
-            original_count = len(videos)
+            processed_original_videos = []
+            for video in videos:
+                selected_frames = select_sign_frames(video)
+                if len(selected_frames) == 30:
+                    processed_original_videos.append(selected_frames)
+            
+            original_count = len(processed_original_videos)
             total_original += original_count
             
-            # Add original videos to output
-            augmented_data[word].extend(videos)
+            # Add processed original videos to output
+            augmented_data[word].extend(processed_original_videos)
             
             # Calculate how many copies we need
             augmentations_needed = max(0, target_videos - original_count)
@@ -83,7 +89,7 @@ def augment_dataset(input_path, output_path, target_videos=100):
                         if len(video) < 30:
                             continue
                         video_frames = select_sign_frames(video)
-                        if len(video_frames) < 30:
+                        if len(video_frames) != 30:
                             continue
                         # Generate parameters ONCE for the entire video
                         shear_params, trans_params, scale_params = generate_params()
@@ -111,6 +117,7 @@ def augment_dataset(input_path, output_path, target_videos=100):
                             # Normalize and add to video
                             augmented_frame = normalize_landmarks(augmented_frame)
                             new_video.append(augmented_frame.tolist())
+                        
                         
                         augmented_data[word].append(new_video)
                         successful_augmentations += 1
@@ -177,7 +184,7 @@ def main():
 
     # Get paths
     paths = get_paths(0)
-    input_dir = os.path.dirname(MERGED_PATH)
+    input_dir = os.path.dirname("Dataset\\new_landmarks\\")
     
     # Find all input files matching the pattern
     input_pattern = f"Dataset\\new_landmarks\splits\*.jsonl.gz"
