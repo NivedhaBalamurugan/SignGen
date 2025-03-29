@@ -104,7 +104,7 @@ def plot_a_frame_29_joints(J, filename, pre_defined_body_values = True):
     ]
 
     # Define body connections
-    upper_body_connections = [(0, 1), (1, 3), (0, 2)]
+    upper_body_connections = [(0, 1), (1, 3), (0, 2), (0,4), (1,5)]
 
     plt.figure(figsize=(6, 6))
     plt.gca().set_aspect('equal', adjustable='box')
