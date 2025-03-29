@@ -80,16 +80,14 @@ def plot_a_frame(J, filename):
 
 
 def plot_a_frame_29_joints(J, filename):
-
-    J = np.array(J).reshape(NUM_JOINTS, NUM_COORDINATES)  # Ensure shape is correct
+    J = np.array(J)
     if np.all(J == 0):
         return  # Skip entirely blank frames
 
     J1 = J[:7, :]  # Body joints (7 joints)
-    J2 = J[7:, :]  # Hand joints (29 joints)
+    J2 = J[7:, :]  # Hand joints (22 joints)
 
     # Define connections for each hand (based on new structure)
-    # For one hand: 0=palm, (1,2)=finger1, (3,4)=finger2, (5,6)=finger3, (7,8)=finger4, (9,10)=finger5
     single_hand_connections = [
         (0, 1), (1, 2),      # Finger 1
         (0, 3), (3, 4),      # Finger 2
@@ -98,63 +96,61 @@ def plot_a_frame_29_joints(J, filename):
         (0, 9), (9, 10),     # Finger 5
     ]
 
-    # Define body connections, excluding indices 4 and 5
+    # Define body connections
     upper_body_connections = [(0, 1), (1, 3), (0, 2)]
-
-    # Hand to body connections
-    # body index 3 connected to hand index 11 (second hand palm)
-    # body index 2 connected to hand index 0 (first hand palm)
-    hand_to_body = [(11, 3), (0, 2)]
-
-    midpoint = (J1[0] + J1[1]) / 2    
-
-    # Check if both hands should be drawn
-    left_hand_valid = not np.all(J2[0] == 0)    # Palm of left hand (index 0)
-    right_hand_valid = not np.all(J2[11] == 0)  # Palm of right hand (index 11)
 
     plt.figure(figsize=(6, 6))
     plt.gca().set_aspect('equal', adjustable='box')
 
+    # Function to check if a joint should be plotted
+    def should_plot(joint):
+        return not (joint[0] == 0 and joint[1] == 0)
+
     # Plot left hand
-    if left_hand_valid:
-        plt.scatter(J2[:11, 0], J2[:11, 1], color='blue', s=10, label="Left Hand")
-        for start, end in single_hand_connections:
+    left_hand_to_plot = [i for i in range(11) if should_plot(J2[i])]
+    plt.scatter(J2[left_hand_to_plot, 0], J2[left_hand_to_plot, 1], color='blue', s=10, label="Left Hand")
+    for start, end in single_hand_connections:
+        if should_plot(J2[start]) and should_plot(J2[end]):
             plt.plot([J2[start, 0], J2[end, 0]],
                     [J2[start, 1], J2[end, 1]],
                     color='green', linewidth=1)
 
     # Plot right hand
-    if right_hand_valid:
-        plt.scatter(J2[11:22, 0], J2[11:22, 1], color='purple', s=10, label="Right Hand")
-        for start, end in single_hand_connections:
-            start += 11
-            end += 11
+    right_hand_to_plot = [i for i in range(11, 22) if should_plot(J2[i])]
+    plt.scatter(J2[right_hand_to_plot, 0], J2[right_hand_to_plot, 1], color='purple', s=10, label="Right Hand")
+    for start, end in single_hand_connections:
+        start += 11
+        end += 11
+        if should_plot(J2[start]) and should_plot(J2[end]):
             plt.plot([J2[start, 0], J2[end, 0]],
                     [J2[start, 1], J2[end, 1]],
                     color='orange', linewidth=1)
 
-    # Plot body landmarks, excluding indices 4 and 5
-    body_indices_to_plot = [0, 1, 2, 3, 6]  # Exclude 4 and 5
+    # Plot body landmarks, excluding (0,0) joints
+    body_indices_to_plot = [i for i in [0, 1, 2, 3, 6] if should_plot(J1[i])]
     plt.scatter(J1[body_indices_to_plot, 0], J1[body_indices_to_plot, 1], color='red', s=15, label="Body Landmarks")
 
-    # Plot body connections, excluding connections involving indices 4 and 5
+    # Plot body connections, excluding connections involving (0,0) joints
     for start, end in upper_body_connections:
-        plt.plot([J1[start, 0], J1[end, 0]],
-                [J1[start, 1], J1[end, 1]],
-                color='black', linewidth=2)
+        if should_plot(J1[start]) and should_plot(J1[end]):
+            plt.plot([J1[start, 0], J1[end, 0]],
+                    [J1[start, 1], J1[end, 1]],
+                    color='black', linewidth=2)
 
-    # Connect nose (body index 0) to midpoint of shoulders
-    plt.plot([J1[6, 0], midpoint[0]], 
-            [J1[6, 1], midpoint[1]], 
-            color='black', linewidth=2, label="6th to Midpoint")
+    # Connect nose (body index 0) to midpoint of shoulders if both exist
+    if should_plot(J1[6]) and should_plot(J1[0]) and should_plot(J1[1]):
+        midpoint = (J1[0] + J1[1]) / 2
+        plt.plot([J1[6, 0], midpoint[0]], 
+                [J1[6, 1], midpoint[1]], 
+                color='black', linewidth=2, label="6th to Midpoint")
 
-    # Plot hand-to-body connections
-    if left_hand_valid:
+    # Plot hand-to-body connections if both joints exist
+    if len(J2) > 0 and should_plot(J2[0]) and should_plot(J1[2]):
         plt.plot([J2[0, 0], J1[2, 0]],
                 [J2[0, 1], J1[2, 1]],
                 color='purple', linestyle="dashed", linewidth=1.5)
 
-    if right_hand_valid:
+    if len(J2) > 11 and should_plot(J2[11]) and should_plot(J1[3]):
         plt.plot([J2[11, 0], J1[3, 0]],
                 [J2[11, 1], J1[3, 1]],
                 color='purple', linestyle="dashed", linewidth=1.5)
@@ -164,6 +160,13 @@ def plot_a_frame_29_joints(J, filename):
     plt.axis("equal")
     plt.xticks([])
     plt.yticks([])
+
+    # # Changes to show axis values:
+    # plt.xticks(fontsize=8)  # Show x-axis ticks with font size 8
+    # plt.yticks(fontsize=8)  # Show y-axis ticks with font size 8
+    # plt.xlabel("X Coordinate", fontsize=10)  # Add x-axis label
+    # plt.ylabel("Y Coordinate", fontsize=10)  # Add y-axis label
+
     plt.legend(loc="upper right")
     plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()
