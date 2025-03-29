@@ -7,10 +7,11 @@ from config import *
 from utils.data_utils import convert_line_segments_to_skeleton, load_word_embeddings
 
 INPUT_WORD = "book"
-MODEL_NAME = "revert_joints"
-EPOCH_NO = "13"
-generator = tf.keras.models.load_model("Models\cgan_model\checkpoints\generator_epoch13_loss0.1170.keras")
+MODEL_NAME = "segments_63epochs"
+EPOCH_NO = "63"
+generator = tf.keras.models.load_model("generator_epoch63_loss0.0385.keras")
 
+IS_SEGMENTS = True
 
 def generate_skeleton_sequence(word):
     word_embeddings = load_word_embeddings()
@@ -27,19 +28,29 @@ def generate_skeleton_sequence(word):
 
 def get_cgan_sequence(word, isSave_Video):
     generated_sequence = generate_skeleton_sequence(word)
-    if generated_sequence is not None:
+    if generated_sequence is None:
+        return None
+        
+    if IS_SEGMENTS:
+        print(f"Generated Skeleton Shape (line segments) for '{word}': {generated_sequence.shape}")
+        line_segment_data = {word: generated_sequence.reshape(1, *generated_sequence.shape)}
+        skeleton_data = convert_line_segments_to_skeleton(line_segment_data)
+        generated_sequence = skeleton_data[word].squeeze()
+    else:
         print(f"Generated Skeleton Shape for '{word}': {generated_sequence.shape}")
-        save_path = OUTPUTS_PATH
-        os.makedirs(save_path, exist_ok=True)
-        json_filepath = os.path.join(save_path, f"generated_skeleton_{word}.json")
-        with open(json_filepath, 'w') as json_file:
-            json.dump(generated_sequence.tolist(), json_file)
-            print("Saved successfully")
-            
-        if isSave_Video:
-            frames_path = os.path.join(OUTPUTS_PATH, f"cgan_{MODEL_NAME}_e{EPOCH_NO}_{INPUT_WORD}")
-            show_output.save_generated_sequence(generated_sequence, frames_path, CGAN_OUTPUT_VIDEO) 
+    
+    save_path = OUTPUTS_PATH
+    os.makedirs(save_path, exist_ok=True)
+    json_filepath = os.path.join(save_path, f"generated_skeleton_{word}.json")
+    with open(json_filepath, 'w') as json_file:
+        json.dump(generated_sequence.tolist(), json_file)
+        print("Saved successfully")
+    
+    if isSave_Video:
+        frames_path = os.path.join(OUTPUTS_PATH, f"cgan_{MODEL_NAME}_e{EPOCH_NO}_{INPUT_WORD}")
+        show_output.save_generated_sequence(generated_sequence, frames_path, CGAN_OUTPUT_VIDEO)
+        
     return generated_sequence
 
 if __name__ == "__main__":
-    get_cgan_sequence(INPUT_WORD,1)
+    get_cgan_sequence(INPUT_WORD,True)
