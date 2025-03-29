@@ -89,65 +89,54 @@ def denormalize_landmarks(landmarks: np.ndarray) -> np.ndarray:
     return denormalized
 
 
-def select_sign_frames(original_frames):
-    if len(original_frames) == 0:
-        return []
-    valid_frames = []
-    
-    for idx, frame in enumerate(original_frames):
-        if not isinstance(frame, (list, np.ndarray)):
-            continue
+import numpy as np
+
+def select_sign_frames(original_frames, target_frames=30):
+    def is_frame_valid(frame):
         try:
             if isinstance(frame, list):
                 frame = np.array(frame, dtype=np.float32)
+            
             if frame.ndim != 2 or frame.shape[0] != 49 or frame.shape[1] != 2:
-                continue           
+                return False
+            
+            hand1 = frame[7:28]
+            hand2 = frame[28:49]
+            
+            hand1_zero_count = np.sum(np.all(hand1 == 0, axis=1))
+            hand2_zero_count = np.sum(np.all(hand2 == 0, axis=1))
+            
+            return (hand1_zero_count <= 10) or (hand2_zero_count <= 10)
+        
+        except Exception:
+            return False
 
-            upper = frame[:7]       # 0-6: Upper body
-            hand1 = frame[7:28]     # 7-27: Hand 1
-            hand2 = frame[28:49]    # 28-48: Hand 2
-                
-            hand1_valid = not np.all(hand1[0] == 0)
-            hand2_valid = not np.all(hand2[0] == 0)
-            
-            hand1_zero = np.sum(np.all(hand1 == 0, axis=1)) 
-            hand2_zero = np.sum(np.all(hand2 == 0, axis=1))
-            
-            hand1_mostly_present = hand1_valid and hand1_zero <= 10 
-            hand2_mostly_present = hand2_valid and hand2_zero <= 10 
-            
-            if hand1_mostly_present or hand2_mostly_present:
-                valid_frames.append(frame)
-            # valid_frames.append(frame)
-                
-        except Exception as e:
-            continue
+    valid_frames = [frame for frame in original_frames if is_frame_valid(frame)]
     
-    if len(valid_frames) < 20:
+    if len(valid_frames) < target_frames // 2:
         return []
-    elif len(valid_frames) == 30:
-        return valid_frames
-    elif len(valid_frames) > 30:
-        indices = np.linspace(0, len(valid_frames) - 1, 30, dtype=int)
-        selected_frames = [valid_frames[i] for i in indices]        
-        return selected_frames
-    else:
-        num_frames_needed = 30 - len(valid_frames)
-        repeat_indices = np.linspace(0, len(valid_frames) - 1, num_frames_needed, dtype=int)
-        insert_operations = []
-
-        for i in repeat_indices:
-            insert_operations.append((i + 1, valid_frames[i]))
-        insert_operations.sort(key=lambda x: x[0], reverse=True)
+    
+    if len(valid_frames) > target_frames:
+        indices = np.linspace(0, len(valid_frames) - 1, target_frames, dtype=int)
+        return [valid_frames[i] for i in indices]
+    
+    interpolated_frames = []
+    indices = np.linspace(0, len(valid_frames) - 1, target_frames, dtype=float)
+    
+    for idx in indices:
+        lower_idx = int(np.floor(idx))
+        upper_idx = min(int(np.ceil(idx)), len(valid_frames) - 1)
         
-        result_frames = valid_frames.copy()
-        
-        for insert_idx, frame in insert_operations:
-            if insert_idx <= len(result_frames):
-                result_frames.insert(insert_idx, frame)
-            else:
-                result_frames.append(frame)        
-        return result_frames
+        if lower_idx == upper_idx:
+            interpolated_frames.append(valid_frames[lower_idx])
+        else:
+            lower_frame = np.array(valid_frames[lower_idx])
+            upper_frame = np.array(valid_frames[upper_idx])
+            weight = idx - lower_idx
+            interpolated_frame = lower_frame * (1 - weight) + upper_frame * weight
+            interpolated_frames.append(interpolated_frame.tolist())
+    
+    return interpolated_frames
     
 def load_skeleton_sequences(filepaths, convert_to_segments=True):
     skeleton_data = {}
