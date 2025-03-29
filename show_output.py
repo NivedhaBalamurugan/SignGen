@@ -79,13 +79,20 @@ def plot_a_frame(J, filename):
     plt.close()
 
 
-def plot_a_frame_29_joints(J, filename):
+def plot_a_frame_29_joints(J, filename, pre_defined_body_values = True):
     J = np.array(J)
     if np.all(J == 0):
         return  # Skip entirely blank frames
 
     J1 = J[:7, :]  # Body joints (7 joints)
     J2 = J[7:, :]  # Hand joints (22 joints)
+
+    if pre_defined_body_values:
+        J1[0] = RIGHT_SHOULDER_VALUE
+        J1[1] = LEFT_SHOULDER_VALUE
+        J1[4] = RIGHT_HIP_VALUE
+        J1[5] = LEFT_HIP_VALUE
+        J1[6] = NOSE_VALUE
 
     # Define connections for each hand (based on new structure)
     single_hand_connections = [

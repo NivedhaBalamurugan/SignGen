@@ -71,8 +71,26 @@ STGCN_MODEL_PATH = os.path.join(MODELS_PATH, "stgcn_model")
 
 # Model parameters
 MAX_FRAMES = 30
+NUM_LINE_SEG = 27
 NUM_JOINTS = 29
 NUM_COORDINATES = 2
+NOSE_VALUE = [0.50327, 0.26939]
+RIGHT_HIP_VALUE =  [0.58529, 0.92522]
+LEFT_HIP_VALUE = [0.42915, 0.93126]
+RIGHT_SHOULDER_VALUE = [0.63497, 0.48466]
+LEFT_SHOULDER_VALUE =  [0.37355, 0.48285]
+
+
+#CVAE parameters
+CVAE_BATCH_SIZE = 100
+learning_rate = 1e-3
+max_epoch = 200
+latent_size = 64
+learning_rate = 1e-4
+batch_size = 64
+
+#Glove parameters
+EMBEDDING_DIM = 50
 
 # CGAN parameters
 CGAN_BATCH_SIZE = 64
@@ -81,22 +99,10 @@ CGAN_LEARNING_RATE = 1e-4
 CGAN_LOG_INTERVAL = 10
 CGAN_NOISE_DIM = 50
 
-
-#CVAE parameters
-CVAE_INPUT_DIM = 98
-CVAE_HIDDEN_DIM = 256
-CVAE_LATENT_DIM = 32
-CVAE_BATCH_SIZE = 64
-
 #STGAN parameters
 IN_CHANNELS = 3
 NUM_NODES = 29
 HIDDEN_DIM = 128
-
-
-#Glove parameters
-EMBEDDING_DIM = 50
-WORD_NOT_FOUND = "before"
 
 def setup_logging(model):
     from datetime import datetime
