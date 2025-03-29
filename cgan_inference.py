@@ -7,11 +7,11 @@ from config import *
 from utils.data_utils import convert_line_segments_to_skeleton, load_word_embeddings
 
 INPUT_WORD = "book"
-MODEL_NAME = "segments_63epochs"
-EPOCH_NO = "63"
-generator = tf.keras.models.load_model("generator_epoch63_loss0.0385.keras")
+MODEL_NAME = "revert_joints"
+EPOCH_NO = "22"
+generator = tf.keras.models.load_model("Models\cgan_model\checkpoints\generator_epoch22_loss0.0992.keras")
 
-IS_SEGMENTS = True
+IS_SEGMENTS = False
 
 def generate_skeleton_sequence(word):
     word_embeddings = load_word_embeddings()
