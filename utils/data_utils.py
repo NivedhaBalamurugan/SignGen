@@ -220,15 +220,15 @@ def load_skeleton_sequences(filepaths, convert_to_segments=False):
 
 joint_connections = [
     # Upper body connections
-    (0, 1),  # Nose to neck/center
-    (1, 3),  # Neck to left shoulder
-    (0, 2),  # Nose to right shoulder 
-    (1, 5),  # Neck to left hip
-    (0, 4),  # Nose to right hip
+    (0,1),   # Right shoulder to left shoulder
+    (1,3),   # Left shoulder to left elbow
+    (0,2),   # Right shoulder to right elbow 
+    (1,5),   # Left shoulder to left hip
+    (0,4),   # Right shoulder to right hip
     
-    (3, 7),  # Left shoulder to left wrist
-    (2, 18),  # Right shoulder to right wrist
-    
+    (3,7),   # Left elbow to left wrist
+    (2,18),  # Right elbow to right wrist
+
     # Left hand connections
     (7, 8),   # Left wrist to left thumb CMC (base)
     (8, 9),   # Left thumb CMC to left thumb tip
@@ -253,35 +253,38 @@ joint_connections = [
     (18, 27), # Right wrist to right pinky MCP (base)
     (27, 28)  # Right pinky MCP to right pinky tip
 ]
+
         
 joint_angle_limits = [
-    # Upper body angles
-    (0, 1, 3, 0, 160),  # Upper body to right arm
-    (0, 1, 5, 0, 160),  # Upper body to left arm
+    # Elbow angles
+    (0, 2, 18, 0, 160),  # Right elbow angle (right shoulder - right elbow - right wrist)
+    (1, 3, 7, 0, 160),   # Left elbow angle (left shoulder - left elbow - left wrist)
     
-    # Arm angles
-    (1, 3, 7, 0, 160),  # Left elbow/arm
-    (1, 2, 18, 0, 160), # Right elbow/arm
+    # Shoulder angles
+    (4, 0, 2, 0, 180),   # Right shoulder to elbow (right hip - right shoulder - right elbow)
+    (5, 1, 3, 0, 180),   # Left shoulder to elbow (left hip - left shoulder - left elbow)
+    (1, 0, 2, 0, 180),   # Across shoulders to right elbow (left shoulder - right shoulder - right elbow)
+    (0, 1, 3, 0, 180),   # Across shoulders to left elbow (right shoulder - left shoulder - left elbow)
     
     # Wrist angles
-    (3, 7, 8, 0, 90),   # Left wrist to thumb base
-    (3, 7, 10, 0, 90),  # Left wrist to index base
-    (2, 18, 19, 0, 90), # Right wrist to thumb base
-    (2, 18, 21, 0, 90), # Right wrist to index base
+    (2, 18, 19, 0, 90),  # Right wrist to thumb (right elbow - right wrist - right thumb base)
+    (2, 18, 21, 0, 90),  # Right wrist to index (right elbow - right wrist - right index base)
+    (3, 7, 8, 0, 90),    # Left wrist to thumb (left elbow - left wrist - left thumb base)
+    (3, 7, 10, 0, 90),   # Left wrist to index (left elbow - left wrist - left index base)
     
     # Left hand finger angles
-    (7, 8, 9, 0, 90),   # Left thumb angle
-    (7, 10, 11, 0, 90), # Left index finger
-    (7, 12, 13, 0, 90), # Left middle finger
-    (7, 14, 15, 0, 90), # Left ring finger
-    (7, 16, 17, 0, 90), # Left pinky finger
+    (7, 8, 9, 0, 90),    # Left thumb angles (wrist - thumb base - thumb tip)
+    (7, 10, 11, 0, 90),  # Left index finger (wrist - index base - index tip)
+    (7, 12, 13, 0, 90),  # Left middle finger (wrist - middle base - middle tip)
+    (7, 14, 15, 0, 90),  # Left ring finger (wrist - ring base - ring tip)
+    (7, 16, 17, 0, 90),  # Left pinky finger (wrist - pinky base - pinky tip)
     
     # Right hand finger angles
-    (18, 19, 20, 0, 90), # Right thumb angle
-    (18, 21, 22, 0, 90), # Right index finger
-    (18, 23, 24, 0, 90), # Right middle finger
-    (18, 25, 26, 0, 90), # Right ring finger
-    (18, 27, 28, 0, 90)  # Right pinky finger
+    (18, 19, 20, 0, 90), # Right thumb angles (wrist - thumb base - thumb tip)
+    (18, 21, 22, 0, 90), # Right index finger (wrist - index base - index tip)
+    (18, 23, 24, 0, 90), # Right middle finger (wrist - middle base - middle tip)
+    (18, 25, 26, 0, 90), # Right ring finger (wrist - ring base - ring tip)
+    (18, 27, 28, 0, 90)  # Right pinky finger (wrist - pinky base - pinky tip)
 ]
 
 def convert_skeleton_to_line_segments(skeleton_data):
