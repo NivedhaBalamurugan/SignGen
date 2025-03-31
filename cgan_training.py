@@ -13,7 +13,7 @@ from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import *
 from scipy.stats import entropy
 
-MODEL_NAME = ""
+MODEL_NAME = "enhance_embedding_in_disc"
 
 FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000
@@ -415,5 +415,5 @@ def main():
         return
 
 if __name__ == "__main__":
-    setup_logging("cgan_training")
+    setup_logging(f"cgan_training_{MODEL_NAME}")
     main()

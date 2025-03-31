@@ -1,8 +1,7 @@
 import tensorflow as tf
-from keras.models import Sequential
 from keras.layers import GRU, Dense, Input, Reshape, TimeDistributed, Bidirectional, UpSampling1D
 from keras.models import Model
-from keras.layers import GRU, Dense, Input, Dropout, BatchNormalization, Reshape, Conv1D, Conv2D, LeakyReLU, Permute
+from keras.layers import Dropout, BatchNormalization, Reshape, Conv1D, LeakyReLU, Concatenate, Lambda, Dot
 from config import *
 from utils.data_utils import joint_connections, joint_angle_limits
 
@@ -39,32 +38,56 @@ def build_discriminator():
     input_shape = (MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES + EMBEDDING_DIM)
     inputs = Input(shape=input_shape)
     
-    # Reshape for easier processing
-    x = Reshape((MAX_FRAMES, NUM_JOINTS * (NUM_COORDINATES + EMBEDDING_DIM)))(inputs)
+    # Separate skeleton and embedding processing
+    skeleton_part = Lambda(lambda x: x[:, :, :, :NUM_COORDINATES])(inputs)
+    word_part = Lambda(lambda x: x[:, :, :, NUM_COORDINATES:])(inputs)
+    
+    # Process word embeddings separately
+    word_features = TimeDistributed(Dense(64, activation='relu'))(word_part)
+    
+    # Reshape skeleton for processing
+    x = Reshape((MAX_FRAMES, NUM_JOINTS * NUM_COORDINATES))(skeleton_part)
     
     # 1D convolutions across time dimension
     x = Conv1D(128, kernel_size=5, strides=1, padding='same')(x)
     x = LeakyReLU(0.2)(x)
-    x = Conv1D(256, kernel_size=5, strides=2, padding='same')(x)
+    x = Conv1D(256, kernel_size=5, strides=1, padding='same')(x)
     x = LeakyReLU(0.2)(x)
     x = BatchNormalization()(x)
+    
+    # Add attention to word features
+    word_features_flat = Reshape((MAX_FRAMES, NUM_JOINTS * 64))(word_features)
+    word_attention = Dense(1, activation='sigmoid')(word_features_flat)
+    x = x * word_attention
     
     # Process joint relationships with 1D convolutions
     x = Conv1D(256, kernel_size=3, strides=1, padding='same')(x)
     x = LeakyReLU(0.2)(x)
     x = BatchNormalization()(x)
     
+    # Add word features back via concatenation
+    x = Concatenate()([x, word_features_flat])
+    
     # GRU layers for temporal processing
     x = Bidirectional(GRU(128, return_sequences=True))(x)
     x = Bidirectional(GRU(128, return_sequences=False))(x)
+    
+    # CHANGE: Add a condition matching layer
+    condition_check = Dense(EMBEDDING_DIM, activation='relu')(x)
+    word_vector_only = Lambda(lambda x: x[:, 0, 0, :])(word_part)
+    condition_matching = Dot(axes=1)([condition_check, word_vector_only])
     
     # Dense classification layers
     x = Dense(256, activation="relu")(x)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
+    
+    # Add condition matching
+    x = Concatenate()([x, condition_matching])
+    
     x = Dense(128, activation="relu")(x)
     x = BatchNormalization()(x)
-    x = Dropout(0.3)(x)
+    x = Dropout(0.5)(x)
     outputs = Dense(1)(x)
     
     return Model(inputs, outputs)
