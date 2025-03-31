@@ -13,7 +13,7 @@ from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import *
 from scipy.stats import entropy
 
-MODEL_NAME = "enhance_embedding_in_disc"
+MODEL_NAME = "enhance_gradient_penalty"
 
 FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000
@@ -52,19 +52,31 @@ def process_data_batches(jsonl_files, word_embeddings):
             pbar.update(1)
     return total_sequences, total_vectors
 
-def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors_expanded):
-    """Calculate gradient penalty for WGAN-GP"""
+def enhanced_gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors_expanded):
+    """Calculate improved gradient penalty for WGAN-GP"""
     batch_size = tf.shape(real_skeletons)[0]
-    epsilon = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
-    epsilon = tf.tile(epsilon, [1, MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES])
-    interpolated = epsilon * real_skeletons + (1 - epsilon) * fake_skeletons
-    discriminator_input = tf.concat([interpolated, word_vectors_expanded], axis=-1)
+    
+    alpha = tf.random.uniform([batch_size, 1, 1, 1], 0.0, 1.0)
+    differences = fake_skeletons - real_skeletons
+    interpolates = real_skeletons + (alpha * differences)
+    
+    feature_noise = tf.random.normal(tf.shape(interpolates), mean=0.0, stddev=0.01)
+    interpolates_noisy = interpolates + feature_noise
+    
+    discriminator_input = tf.concat([interpolates_noisy, word_vectors_expanded], axis=-1)
+    
     with tf.GradientTape() as tape:
         tape.watch(discriminator_input)
         pred = discriminator(discriminator_input, training=True)
+    
     gradients = tape.gradient(pred, discriminator_input)
-    gradients_norm = tf.sqrt(tf.reduce_sum(tf.square(gradients), axis=[1, 2, 3]) + 1e-8)
-    gradient_penalty = tf.reduce_mean((gradients_norm - 1.0) ** 2)
+    
+    gradients_sqr = tf.square(gradients)
+    gradients_sqr_sum = tf.reduce_sum(gradients_sqr, axis=[1, 2, 3])
+    gradient_l2_norm = tf.sqrt(gradients_sqr_sum + 1e-8)
+    
+    gradient_penalty = tf.reduce_mean(tf.square(gradient_l2_norm - 1.0))
+    
     return gradient_penalty
 
 def calculate_pkd(real_skeletons, generated_skeletons):
@@ -153,7 +165,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             gen_adv_loss = generator_loss(fake_output)
             
             # Gradient penalty for WGAN-GP
-            gp = gradient_penalty(discriminator, real_skeleton_batch, generated_skeleton, word_vector_expanded)
+            gp = enhanced_gradient_penalty(discriminator, real_skeleton_batch, generated_skeleton, word_vector_expanded)
             
             # Additional generator losses
             bone_loss = bone_length_consistency_loss(generated_skeleton)
