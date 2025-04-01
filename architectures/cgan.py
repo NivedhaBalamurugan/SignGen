@@ -70,27 +70,46 @@ def build_discriminator():
     
     # GRU layers for temporal processing
     x = Bidirectional(GRU(128, return_sequences=True))(x)
-    x = Bidirectional(GRU(128, return_sequences=False))(x)
+    shared_features = Bidirectional(GRU(128, return_sequences=False))(x)
     
-    # CHANGE: Add a condition matching layer
-    condition_check = Dense(EMBEDDING_DIM, activation='relu')(x)
+    # Real/fake discrimination branch
+    disc_output = Dense(256, activation="relu")(shared_features)
+    disc_output = BatchNormalization()(disc_output)
+    disc_output = Dropout(0.3)(disc_output)
+    
+    # Add a condition matching layer
+    condition_check = Dense(EMBEDDING_DIM, activation='relu')(disc_output)
     word_vector_only = Lambda(lambda x: x[:, 0, 0, :])(word_part)
     condition_matching = Dot(axes=1)([condition_check, word_vector_only])
     
-    # Dense classification layers
-    x = Dense(256, activation="relu")(x)
-    x = BatchNormalization()(x)
-    x = Dropout(0.3)(x)
+    # Add condition matching to disc output
+    disc_output = Concatenate()([disc_output, condition_matching])
     
-    # Add condition matching
-    x = Concatenate()([x, condition_matching])
+    disc_output = Dense(128, activation="relu")(disc_output)
+    disc_output = BatchNormalization()(disc_output)
+    disc_output = Dropout(0.5)(disc_output)
+    disc_output = Dense(1)(disc_output)  # Real/fake output
     
-    x = Dense(128, activation="relu")(x)
-    x = BatchNormalization()(x)
-    x = Dropout(0.5)(x)
-    outputs = Dense(1)(x)
+    # Word classification branch (for 20 words)
+    class_output = Dense(128, activation="relu")(shared_features)
+    class_output = BatchNormalization()(class_output)
+    class_output = Dropout(0.3)(class_output)
+    class_output = Dense(20, activation="softmax")(class_output)  # Word classification with 20 classes
     
-    return Model(inputs, outputs)
+    # Create model with both outputs
+    model = Model(inputs, [disc_output, class_output])
+    
+    # For compatibility with existing code, create a wrapper function that returns only the first output
+    def wrapped_model(inputs):
+        return model(inputs)[0]
+    
+    # Create a tf.keras.Model that has the same inputs as the original model but only returns the first output
+    compatibility_model = tf.keras.models.Model(inputs=model.inputs, outputs=model(model.inputs)[0])
+    
+    # Store the full model as an attribute of the compatibility model for access during training
+    compatibility_model.full_model = model
+    
+    return compatibility_model
 
 def generator_loss(fake_output):
     return -tf.reduce_mean(fake_output)
