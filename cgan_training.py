@@ -13,7 +13,7 @@ from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import *
 from scipy.stats import entropy
 
-MODEL_NAME = "auxilary_classifier"
+MODEL_NAME = "shuffle_remove_batching"
 
 FILES_PER_BATCH = 1
 MAX_SAMPLES_PER_BATCH = 1000
@@ -121,6 +121,16 @@ def create_mask(real_skeleton_batch):
     mask = tf.reduce_sum(tf.abs(real_skeleton_batch), axis=-1) > 0  
     mask = tf.cast(mask, FP_PRECISION)  
     return mask  
+
+def shuffle_training_data(word_vectors, skeleton_sequences, word_labels):
+    assert len(word_vectors) == len(skeleton_sequences) == len(word_labels)
+    indices = np.arange(len(word_vectors))
+    np.random.shuffle(indices)
+    return (
+        word_vectors[indices], 
+        skeleton_sequences[indices], 
+        word_labels[indices]
+    )
     
 def train_gan(generator, discriminator, word_vectors, skeleton_sequences, word_labels, epochs=100, batch_size=CGAN_BATCH_SIZE, patience=10):
     if not validate_data_shapes(word_vectors, skeleton_sequences):
@@ -133,8 +143,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, word_l
     total_disc_loss = 0.0
 
     num_samples = word_vectors.shape[0]
-    chunks_per_epoch = max(1, num_samples // MAX_SAMPLES_PER_BATCH + (1 if num_samples % MAX_SAMPLES_PER_BATCH > 0 else 0))
-
+    
     logging.info(f"Training with {num_samples} samples, {num_samples//batch_size + (1 if num_samples % batch_size > 0 else 0)} batches per epoch")
 
     best_loss = float('inf')
@@ -142,10 +151,6 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, word_l
     best_generator_weights = None
     best_discriminator_weights = None
     
-    # Define label smoothing values
-    real_label_value = 0.9  # Instead of 1.0 for label smoothing
-
-    # Track metrics for monitoring diversity
     all_diversity_scores = []
     word_specific_outputs = {i: [] for i in range(20)}  # Assuming 20 word classes
 
@@ -154,7 +159,13 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, word_l
         actual_batch_size = tf.shape(word_vector_batch)[0]
         noise = tf.random.normal([actual_batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
         word_vector_batch = tf.cast(word_vector_batch, FP_PRECISION)
-        generator_input = tf.concat([noise, word_vector_batch], axis=1)
+        
+        # Add noise to word embeddings for robustness
+        word_vector_batch_noisy = word_vector_batch + tf.random.normal(
+            tf.shape(word_vector_batch), mean=0.0, stddev=0.02, dtype=FP_PRECISION
+        )
+        
+        generator_input = tf.concat([noise, word_vector_batch_noisy], axis=1)
     
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
             generated_skeleton = generator(generator_input, training=True)
@@ -206,6 +217,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, word_l
             disc_loss = disc_adv_loss + 10.0 * gp + 2.0 * real_class_loss
             
             # Combine generator loss components with meaningful weights
+            # Increased weight on classification loss to help with mode collapse
             gen_loss = (
                 1.0 * gen_adv_loss +       # Adversarial loss
                 10.0 * mse_loss +          # Reconstruction loss (high weight)
@@ -213,7 +225,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, word_l
                 2.0 * motion_loss +        # Motion smoothness 
                 3.0 * anatomical_loss +    # Anatomical plausibility
                 2.0 * semantic_loss +      # Semantic consistency
-                3.0 * fake_class_loss      # Classification loss for generator
+                5.0 * fake_class_loss      # Classification loss
             )
             
             # Apply mask to focus on valid joints
@@ -270,6 +282,11 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, word_l
             return vectors + noise
 
     for epoch in range(epochs):
+        # Shuffle data at the start of each epoch
+        word_vectors_shuffled, skeleton_sequences_shuffled, word_labels_shuffled = shuffle_training_data(
+            word_vectors, skeleton_sequences, word_labels
+        )
+        
         epoch_gen_loss = tf.keras.metrics.Mean()
         epoch_disc_loss = tf.keras.metrics.Mean()
         epoch_adv_loss = tf.keras.metrics.Mean()
@@ -280,82 +297,43 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, word_l
         epoch_anatomical_loss = tf.keras.metrics.Mean()
         epoch_semantic_loss = tf.keras.metrics.Mean()
 
-        for chunk_idx in range(chunks_per_epoch):
-            chunk_start = chunk_idx * MAX_SAMPLES_PER_BATCH
-            chunk_end = min(chunk_start + MAX_SAMPLES_PER_BATCH, num_samples)
-
-            word_vectors_chunk = word_vectors[chunk_start:chunk_end]
-            skeleton_sequences_chunk = skeleton_sequences[chunk_start:chunk_end]
-            word_labels_chunk = word_labels[chunk_start:chunk_end]
-
-            chunk_size = chunk_end - chunk_start
-            full_batches = chunk_size // batch_size
-            has_partial_batch = chunk_size % batch_size > 0
-            chunk_batches = full_batches + (1 if has_partial_batch else 0)
-
-            with tqdm(total=chunk_batches, desc=f"Epoch {epoch+1}/{epochs} Chunk {chunk_idx+1}/{chunks_per_epoch}") as pbar:
-                for i in range(full_batches):
-                    try:
-                        batch_start = i * batch_size
-                        batch_end = batch_start + batch_size
-                        word_batch = word_vectors_chunk[batch_start:batch_end]
-                        skeleton_batch = skeleton_sequences_chunk[batch_start:batch_end]
-                        label_batch = word_labels_chunk[batch_start:batch_end]
-                        
-                        gen_loss, disc_loss, adv_loss, class_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss = train_step(
-                            word_batch, skeleton_batch, label_batch)
-                        
-                        epoch_gen_loss.update_state(gen_loss)
-                        epoch_disc_loss.update_state(disc_loss)
-                        epoch_adv_loss.update_state(adv_loss)
-                        epoch_class_loss.update_state(class_loss)
-                        epoch_mse_loss.update_state(mse_loss)
-                        epoch_bone_loss.update_state(bone_loss)
-                        epoch_motion_loss.update_state(motion_loss)
-                        epoch_anatomical_loss.update_state(anatomical_loss)
-                        epoch_semantic_loss.update_state(semantic_loss)
-                        
-                        pbar.set_postfix({
-                            'gen_loss': f'{gen_loss:.4f}', 
-                            'disc_loss': f'{disc_loss:.4f}',
-                            'class_loss': f'{class_loss:.4f}'
-                        })
-                        pbar.update(1)
-                    except Exception as e:
-                        logging.error(f"Error in training batch: {e}")
-                        continue
+        # Calculate total batches for the epoch
+        num_samples = word_vectors_shuffled.shape[0]
+        batches_per_epoch = num_samples // batch_size + (1 if num_samples % batch_size > 0 else 0)
+        
+        with tqdm(total=batches_per_epoch, desc=f"Epoch {epoch+1}/{epochs}") as pbar:
+            for i in range(batches_per_epoch):
+                batch_start = i * batch_size
+                batch_end = min(batch_start + batch_size, num_samples)
                 
-                if has_partial_batch:
-                    try:
-                        batch_start = full_batches * batch_size
-                        word_batch = word_vectors_chunk[batch_start:]
-                        skeleton_batch = skeleton_sequences_chunk[batch_start:]
-                        label_batch = word_labels_chunk[batch_start:]
-                        
-                        gen_loss, disc_loss, adv_loss, class_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss = train_step(
-                            word_batch, skeleton_batch, label_batch)
-                        
-                        epoch_gen_loss.update_state(gen_loss)
-                        epoch_disc_loss.update_state(disc_loss)
-                        epoch_adv_loss.update_state(adv_loss)
-                        epoch_class_loss.update_state(class_loss)
-                        epoch_mse_loss.update_state(mse_loss)
-                        epoch_bone_loss.update_state(bone_loss)
-                        epoch_motion_loss.update_state(motion_loss)
-                        epoch_anatomical_loss.update_state(anatomical_loss)
-                        epoch_semantic_loss.update_state(semantic_loss)
-                        
-                        pbar.set_postfix({
-                            'gen_loss': f'{gen_loss:.4f}', 
-                            'disc_loss': f'{disc_loss:.4f}',
-                            'class_loss': f'{class_loss:.4f}'
-                        })
-                        pbar.update(1)
-                    except Exception as e:
-                        logging.error(f"Error in training partial batch: {e}")
-
-            del word_vectors_chunk, skeleton_sequences_chunk, word_labels_chunk
-            gc.collect()
+                word_batch = word_vectors_shuffled[batch_start:batch_end]
+                skeleton_batch = skeleton_sequences_shuffled[batch_start:batch_end]
+                label_batch = word_labels_shuffled[batch_start:batch_end]
+                
+                try:
+                    gen_loss, disc_loss, adv_loss, class_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss = train_step(
+                        word_batch, skeleton_batch, label_batch
+                    )
+                    
+                    epoch_gen_loss.update_state(gen_loss)
+                    epoch_disc_loss.update_state(disc_loss)
+                    epoch_adv_loss.update_state(adv_loss)
+                    epoch_class_loss.update_state(class_loss)
+                    epoch_mse_loss.update_state(mse_loss)
+                    epoch_bone_loss.update_state(bone_loss)
+                    epoch_motion_loss.update_state(motion_loss)
+                    epoch_anatomical_loss.update_state(anatomical_loss)
+                    epoch_semantic_loss.update_state(semantic_loss)
+                    
+                    pbar.set_postfix({
+                        'gen_loss': f'{gen_loss:.4f}', 
+                        'disc_loss': f'{disc_loss:.4f}',
+                        'class_loss': f'{class_loss:.4f}'
+                    })
+                    pbar.update(1)
+                except Exception as e:
+                    logging.error(f"Error in training batch: {e}")
+                    continue
             
         # At the end of each epoch, generate samples for each word and track diversity
         test_noise = tf.random.normal([20, CGAN_NOISE_DIM])  # One sample per word class
@@ -527,6 +505,11 @@ def main():
     all_skeleton_sequences = np.array(total_sequences)
     all_word_vectors = np.array(total_vectors)
     all_word_labels = np.array(total_labels)  # Convert labels to numpy array
+
+    # Shuffle the data before training
+    all_word_vectors, all_skeleton_sequences, all_word_labels = shuffle_training_data(
+        all_word_vectors, all_skeleton_sequences, all_word_labels
+    )
 
     del total_sequences, total_vectors, total_labels, word_embeddings
     gc.collect()
