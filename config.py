@@ -62,6 +62,7 @@ def get_paths(chunk_index=0):
 
 # Final landmarks paths
 FINAL_JSONL_PATHS = os.path.join(FINAL_PATH, "*.jsonl")
+FINAL_JSONL_GZ_PATHS = os.path.join(FINAL_PATH, "*.jsonl.gz")
 
 # Model paths
 CGAN_MODEL_PATH = os.path.join(MODELS_PATH, "cgan_model", "checkpoints")

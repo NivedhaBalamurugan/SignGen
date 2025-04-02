@@ -2,6 +2,7 @@ import os
 import json
 import numpy as np
 from config import *
+from utils.jsonl_utils import load_jsonl_gz
 
 def load_glove_embeddings():    
         
@@ -138,84 +139,75 @@ def select_sign_frames(original_frames, target_frames=30):
     
     return interpolated_frames
     
-def load_skeleton_sequences(filepaths, convert_to_segments=False):
+def load_skeleton_sequences(filepaths):
     skeleton_data = {}
-    
+
     for filepath in filepaths:
         if not os.path.exists(filepath):
             logging.error(f"Skeleton data file not found: {filepath}")
-            continue  
-            
+            continue
+
         try:
-            with open(filepath, 'r') as file:
-                for line in file:
-                    data = json.loads(line.strip())
-                    word = list(data.keys())[0]
-                    videos = data[word]
-                    
-                    if word not in skeleton_data:
-                        skeleton_data[word] = []
-                    
-                    for video in videos:
-                        video_sequence = np.zeros((30, 29, 2))
-                        
-                        for frame_idx, frame in enumerate(video[:30]):
-                            upper = frame[:7] 
-                            
-                            left_wrist = frame[7]
-                            left_thumb_cmc = frame[8]
-                            left_thumb_tip = frame[11]
-                            left_index_mcp = frame[12]
-                            left_index_tip = frame[15]
-                            left_middle_mcp = frame[16]
-                            left_middle_tip = frame[19]
-                            left_ring_mcp = frame[20]
-                            left_ring_tip = frame[23]
-                            left_pinky_mcp = frame[24]
-                            left_pinky_tip = frame[27]
-                            
-                            right_wrist = frame[28]
-                            right_thumb_mcp = frame[29]
-                            right_thumb_tip = frame[32]
-                            right_index_mcp = frame[33]
-                            right_index_tip = frame[36]
-                            right_middle_mcp = frame[37]
-                            right_middle_tip = frame[40]
-                            right_ring_mcp = frame[41]
-                            right_ring_tip = frame[44]
-                            right_pinky_mcp = frame[45]
-                            right_pinky_tip = frame[48]
-                            
-                            frame_landmarks = np.concatenate([
-                                upper, 
-                                [left_wrist], [left_thumb_cmc], [left_thumb_tip], 
-                                [left_index_mcp], [left_index_tip], [left_middle_mcp], [left_middle_tip], 
-                                [left_ring_mcp], [left_ring_tip], [left_pinky_mcp], [left_pinky_tip],
-                                [right_wrist], [right_thumb_mcp], [right_thumb_tip], 
-                                [right_index_mcp], [right_index_tip], [right_middle_mcp], [right_middle_tip], 
-                                [right_ring_mcp], [right_ring_tip], [right_pinky_mcp], [right_pinky_tip]
-                            ])
-                            
-                            frame_landmarks_2d = frame_landmarks[:, :2]
-                            
-                            video_sequence[frame_idx] = frame_landmarks_2d
-                        
-                        skeleton_data[word].append(video_sequence)
+            data = load_jsonl_gz(filepath, single_object=False)
+            
+            for word, videos in data.items():
+                if word not in skeleton_data:
+                    skeleton_data[word] = []
+
+                for video in videos:
+                    video_sequence = np.zeros((30, 29, 2))
+
+                    for frame_idx, frame in enumerate(video[:30]):
+                        upper = frame[:7]
+
+                        left_wrist = frame[7]
+                        left_thumb_cmc = frame[8]
+                        left_thumb_tip = frame[11]
+                        left_index_mcp = frame[12]
+                        left_index_tip = frame[15]
+                        left_middle_mcp = frame[16]
+                        left_middle_tip = frame[19]
+                        left_ring_mcp = frame[20]
+                        left_ring_tip = frame[23]
+                        left_pinky_mcp = frame[24]
+                        left_pinky_tip = frame[27]
+
+                        right_wrist = frame[28]
+                        right_thumb_mcp = frame[29]
+                        right_thumb_tip = frame[32]
+                        right_index_mcp = frame[33]
+                        right_index_tip = frame[36]
+                        right_middle_mcp = frame[37]
+                        right_middle_tip = frame[40]
+                        right_ring_mcp = frame[41]
+                        right_ring_tip = frame[44]
+                        right_pinky_mcp = frame[45]
+                        right_pinky_tip = frame[48]
+
+                        frame_landmarks = np.concatenate([
+                            upper,
+                            [left_wrist], [left_thumb_cmc], [left_thumb_tip],
+                            [left_index_mcp], [left_index_tip], [left_middle_mcp], [left_middle_tip],
+                            [left_ring_mcp], [left_ring_tip], [left_pinky_mcp], [left_pinky_tip],
+                            [right_wrist], [right_thumb_mcp], [right_thumb_tip],
+                            [right_index_mcp], [right_index_tip], [right_middle_mcp], [right_middle_tip],
+                            [right_ring_mcp], [right_ring_tip], [right_pinky_mcp], [right_pinky_tip]
+                        ])
+
+                        frame_landmarks_2d = frame_landmarks[:, :2]
+
+                        video_sequence[frame_idx] = frame_landmarks_2d
+
+                    skeleton_data[word].append(video_sequence)
 
         except Exception as e:
             logging.error(f"Error processing {filepath}: {str(e)}")
             continue
 
-    # Convert to numpy arrays
     for word in skeleton_data:
         skeleton_data[word] = np.array(skeleton_data[word])
         logging.info(f"Word '{word}' has shape {skeleton_data[word].shape}")
-    
-    # Convert to line segments if requested
-    if convert_to_segments:
-        skeleton_data, num_segments = convert_skeleton_to_line_segments(skeleton_data)
-        logging.info(f"Converted to line segments representation with {num_segments} segments per frame")
-    
+
     return skeleton_data
 
 joint_connections = [

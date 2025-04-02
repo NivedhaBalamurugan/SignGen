@@ -480,9 +480,9 @@ def main():
     if not word_embeddings or not validate_word_embeddings(word_embeddings):
         return
 
-    jsonl_files = sorted(glob.glob(FINAL_JSONL_PATHS))
+    jsonl_files = sorted(glob.glob(FINAL_JSONL_GZ_PATHS))
     if not jsonl_files:
-        logging.error(f"No JSONL files found matching pattern: {FINAL_JSONL_PATHS}")
+        logging.error(f"No JSONL files found matching pattern: {FINAL_JSONL_GZ_PATHS}")
         return
 
     total_sequences = []
