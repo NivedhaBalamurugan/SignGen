@@ -18,7 +18,7 @@ VIDEOS_PATH = os.path.join(DATASET_PATH, "videos")
 WLASL_JSON_PATH = os.path.join(DATASET_PATH, "WLASL_v0.3.json")
 MISSING_TXT_PATH = os.path.join(DATASET_PATH, "missing.txt")
 CHUNKS_JSON_PATH = os.path.join(DATASET_PATH, "chunks.json")
-GLOVE_TXT_PATH = os.path.join(DATASET_PATH, "glove", "filtered_glove.txt")
+GLOVE_TXT_PATH = os.path.join(DATASET_PATH, "glove", "glove_20words.50d.txt")
 ONE_HOT_TXT_PATH = os.path.join(DATASET_PATH, "0_landmarks_top50_aug100_stats.json")
 
 # Landmarks paths
@@ -62,6 +62,7 @@ def get_paths(chunk_index=0):
 
 # Final landmarks paths
 FINAL_JSONL_PATHS = os.path.join(FINAL_PATH, "*.jsonl")
+FINAL_JSONL_GZ_PATHS = os.path.join(FINAL_PATH, "*.jsonl.gz")
 
 # Model paths
 CGAN_MODEL_PATH = os.path.join(MODELS_PATH, "cgan_model", "checkpoints")
