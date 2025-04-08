@@ -18,7 +18,7 @@ VIDEOS_PATH = os.path.join(DATASET_PATH, "videos")
 WLASL_JSON_PATH = os.path.join(DATASET_PATH, "WLASL_v0.3.json")
 MISSING_TXT_PATH = os.path.join(DATASET_PATH, "missing.txt")
 CHUNKS_JSON_PATH = os.path.join(DATASET_PATH, "chunks.json")
-GLOVE_TXT_PATH = os.path.join(DATASET_PATH, "glove", "glove_20words.50d.txt")
+GLOVE_TXT_PATH = os.path.join(DATASET_PATH, "glove", "glove_20words.txt")
 ONE_HOT_TXT_PATH = os.path.join(DATASET_PATH, "0_landmarks_top50_aug100_stats.json")
 
 # Landmarks paths
@@ -39,8 +39,6 @@ MHA_OUTPUT_FRAMES = os.path.join(OUTPUTS_PATH, "mha_frames")
 #Final output Video paths
 CVAE_OUTPUT_VIDEO = os.path.join(OUTPUTS_PATH, "cvae_video", "video.mp4")
 CGAN_OUTPUT_VIDEO = os.path.join(OUTPUTS_PATH, "cgan_video", "video.mp4")
-CVAE__STGCN_OUTPUT_VIDEO = os.path.join(OUTPUTS_PATH, "cvae_stgcn_video", "video.mp4")
-CGAN_STGCN_OUTPUT_VIDEO = os.path.join(OUTPUTS_PATH, "cgan_stgcn_video", "video.mp4")
 MHA_OUTPUT_VIDEO = os.path.join(OUTPUTS_PATH, "mha_video", "video.mp4")
 
 FRAME_WIDTH = 224  

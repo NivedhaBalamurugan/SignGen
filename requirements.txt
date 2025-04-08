@@ -12,3 +12,5 @@ torchvision
 torchaudio
 ffmpeg
 scikit-image
+flask
+flask-cores

@@ -1,118 +1,189 @@
+import os
+import numpy as np
+import logging
+from logging.handlers import RotatingFileHandler
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import matplotlib.pyplot as plt
+import glob
+import orjson
+import gc
+import psutil
+from torch.utils.data import Dataset, DataLoader
+from torch import optim
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+from torch.optim import AdamW
+import torch.cuda.amp as amp
+import warnings
+from tqdm import tqdm
+from functools import lru_cache
 from config import *
 
-class Attention(nn.Module):
-    def __init__(self, hidden_dim):
-        super(Attention, self).__init__()
-        self.attn = nn.Linear(hidden_dim, 1)
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from collections import OrderedDict
 
-    def forward(self, outputs, mask):
-        scores = self.attn(outputs).squeeze(-1)
-        scores = scores.masked_fill(mask == 0, -1e9)
-        attn_weights = torch.softmax(scores, dim=1)
-        context = torch.bmm(attn_weights.unsqueeze(1), outputs).squeeze(1)
-        return context, attn_weights
-
-class Encoder(nn.Module):
-    def __init__(self, input_dim, hidden_dim, latent_dim, dropout_prob=0.5):  # Increased dropout
-        super(Encoder, self).__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, batch_first=True, bidirectional=True, num_layers=2)
-        self.attention = Attention(hidden_dim * 2)
-        self.fc_mu = nn.Linear(hidden_dim * 4, latent_dim)
-        self.fc_logvar = nn.Linear(hidden_dim * 4, latent_dim)
-
-        self.batch_norm_hidden = nn.BatchNorm1d(hidden_dim * 2)
-        self.dropout = nn.Dropout(p=dropout_prob)  # Increased dropout
-
-    def forward(self, x):
-        B, T, _, _ = x.size()
-        x = x.view(B, T, -1)
-
-        mask = (x.sum(dim=2) != 0).float()
-        outputs, (h_n, _) = self.lstm(x)
-
-        outputs = self.dropout(outputs)  # Dropout after LSTM
-
-        outputs = outputs.permute(0, 2, 1)
-        outputs = self.batch_norm_hidden(outputs)
-        outputs = outputs.permute(0, 2, 1)
-
-        context, attn_weights = self.attention(outputs, mask)
-
-        mu = self.fc_mu(torch.cat([outputs.mean(dim=1), context], dim=-1))
-        logvar = self.fc_logvar(torch.cat([outputs.mean(dim=1), context], dim=-1))
-
-        std = torch.exp(0.5 * logvar)
-        z = mu + std * torch.randn_like(std)
-
-        return z, mu, logvar, attn_weights
-
-
-class Decoder(nn.Module):
-    def __init__(self, latent_dim, cond_dim, hidden_dim, output_dim, seq_len, dropout_prob=0.5):  # Increased dropout
-        super(Decoder, self).__init__()
-        self.seq_len = seq_len
-        self.fc = nn.Linear(latent_dim + cond_dim, latent_dim + cond_dim)
-        self.lstm = nn.LSTM(latent_dim + cond_dim, hidden_dim, batch_first=True, num_layers=2)
-        self.fc_out = nn.Linear(hidden_dim, output_dim)
-        self.batch_norm = nn.BatchNorm1d(hidden_dim)
-        self.dropout = nn.Dropout(p=dropout_prob)  # Increased dropout
-
-    def forward(self, z, cond):
-        B = z.size(0)
-        z_cond = torch.cat([z, cond], dim=-1)
-        z_cond = torch.relu(self.fc(z_cond))
-
-        z_seq = z_cond.unsqueeze(1).repeat(1, self.seq_len, 1)
-        outputs, _ = self.lstm(z_seq)
-
-        outputs = self.dropout(outputs)  # Dropout after LSTM
-
-        outputs = outputs.permute(0, 2, 1)
-        outputs = self.batch_norm(outputs)
-        outputs = outputs.permute(0, 2, 1)
-
-        outputs = self.dropout(outputs)  # Dropout before output layer
-
-        recon_seq = torch.tanh(self.fc_out(outputs))
-        return recon_seq
-
-class LatentClassifier(nn.Module):
-    def __init__(self, latent_dim, dropout_prob=0.5):  # Added dropout
-        super(LatentClassifier, self).__init__()
-        self.fc = nn.Sequential(
-            nn.Linear(latent_dim, 64),
+class TemporalEncoder(nn.Module):
+    def __init__(self, input_shape, nhid=64, cond_dim=50):
+        super(TemporalEncoder, self).__init__()
+        # input_shape: (30, 29, 2)
+        self.temporal_conv = nn.Sequential(
+            # First temporal block
+            nn.Conv1d(29*2, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.Dropout(p=dropout_prob),  # Added dropout
-            nn.Linear(64, 1),
-            nn.Sigmoid()
+            
+            # Second temporal block with downsampling
+            nn.Conv1d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            
+            # Third temporal block
+            nn.Conv1d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            
+            # Fourth temporal block with downsampling
+            nn.Conv1d(256, 512, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm1d(512),
+            nn.ReLU(),
         )
-
-    def forward(self, z):
-        return self.fc(z)
-
-class ConditionalVAE(nn.Module):
-    def __init__(self, input_dim, hidden_dim, latent_dim, cond_dim, output_dim, seq_len):
-        super(ConditionalVAE, self).__init__()
-        self.encoder = Encoder(input_dim, hidden_dim, latent_dim, dropout_prob=0.5)  # Increased dropout
-        self.decoder = Decoder(latent_dim, cond_dim, hidden_dim, output_dim, seq_len, dropout_prob=0.5)  # Increased dropout
-        self.latent_classifier = LatentClassifier(latent_dim, dropout_prob=0.5)  # Added dropout
-
+        
+        self.temporal_pool = nn.AdaptiveAvgPool1d(1)
+        self.flatten = nn.Flatten()
+        
+        # MLP to process temporal features + condition
+        self.mlp = nn.Sequential(
+            nn.Linear(512 + cond_dim, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+        )
+        
+        self.calc_mean = nn.Linear(128, nhid)
+        self.calc_logvar = nn.Linear(128, nhid)
+        
     def forward(self, x, cond):
-        z, mu, logvar, attn_weights = self.encoder(x)
-        recon_x = self.decoder(z, cond)
-        return recon_x, mu, logvar, attn_weights, z
+        # x shape: [bs, 30, 29, 2]
+        bs = x.shape[0]
+        x = x.view(bs, 30, -1).transpose(1, 2)  # [bs, 58, 30]
+        
+        temporal_features = self.temporal_conv(x)  # [bs, 512, 8]
+        temporal_features = self.temporal_pool(temporal_features)  # [bs, 512, 1]
+        temporal_features = self.flatten(temporal_features)  # [bs, 512]
+        
+        # Concatenate condition
+        features = torch.cat([temporal_features, cond], dim=1)
+        features = self.mlp(features)
+        
+        mean = self.calc_mean(features)
+        logvar = self.calc_logvar(features)
+        
+        return mean, logvar
 
+class TemporalDecoder(nn.Module):
+    def __init__(self, output_shape, nhid=64, cond_dim=50):
+        super(TemporalDecoder, self).__init__()
+        self.output_shape = output_shape  # (30, 29, 2)
+        self.nhid = nhid
+        self.cond_dim = cond_dim
+        
+        # Initial processing of latent + condition
+        self.mlp = nn.Sequential(
+            nn.Linear(nhid + cond_dim, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Linear(128, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            nn.Linear(256, 512 * 4),  # Prepare for conv transpose
+            nn.BatchNorm1d(512 * 4),
+            nn.ReLU(),
+        )
+        
+        # Temporal upsampling with precise dimension calculation
+        self.temporal_upconv = nn.Sequential(
+            # First upconv block (4 -> 8)
+            nn.ConvTranspose1d(512, 256, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm1d(256),
+            nn.ReLU(),
+            
+            # Second upconv block (8 -> 16)
+            nn.ConvTranspose1d(256, 128, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            
+            # Third upconv block (16 -> 32)
+            nn.ConvTranspose1d(128, 64, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            
+            # Adjust to exact 30 frames (32 -> 30)
+            nn.Conv1d(64, 64, kernel_size=3, stride=1, padding=0),  # Removes 2 frames
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            
+            # Final output layer
+            nn.Conv1d(64, 29*2, kernel_size=1, stride=1),  # [bs, 58, 30]
+        )
+        
+    def forward(self, z, cond):
+        bs = z.shape[0]
+        if cond is not None:
+            z = torch.cat([z, cond], dim=1)
+            
+        # Process through MLP
+        features = self.mlp(z)  # [bs, 512*4]
+        features = features.view(bs, 512, 4)  # [bs, 512, 4]
+        
+        # Temporal upsampling
+        output = self.temporal_upconv(features)  # [bs, 58, 30]
+        
+        # Reshape to original format
+        output = output.transpose(1, 2)  # [bs, 30, 58]
+        output = output.reshape(bs, *self.output_shape)  # [bs, 30, 29, 2]
+        
+        return output
 
-def kl_divergence_loss(mu, logvar):
-    return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
-def latent_classification_loss(z_v, z_g, latent_classifier):
-    pred_z_v = latent_classifier(z_v)
-    pred_z_g = latent_classifier(z_g)
+class SignLanguageVAE(nn.Module):
+    def __init__(self, input_shape, nhid=64, cond_dim=50):
+        super(SignLanguageVAE, self).__init__()
+        self.input_shape = input_shape
+        self.nhid = nhid
+        self.cond_dim = cond_dim
+        
+        self.encoder = TemporalEncoder(input_shape, nhid, cond_dim)
+        self.decoder = TemporalDecoder(input_shape, nhid, cond_dim)
+        
+    def sampling(self, mean, logvar):
+        eps = torch.randn(mean.shape).to(mean.device)
+        sigma = 0.5 * torch.exp(logvar)
+        return mean + eps * sigma
     
-    loss_z_v = nn.functional.binary_cross_entropy(pred_z_v, torch.ones_like(pred_z_v))
-    loss_z_g = nn.functional.binary_cross_entropy(pred_z_g, torch.zeros_like(pred_z_g))
+    def forward(self, x, cond):
+        mean, logvar = self.encoder(x, cond)
+        z = self.sampling(mean, logvar)
+        x_hat = self.decoder(z, cond)
+        return x_hat, mean, logvar
     
-    return loss_z_v + loss_z_g
+    def generate(self, cond):
+        batch_size = cond.shape[0]
+        z = torch.randn((batch_size, self.nhid)).to(cond.device)
+        return self.decoder(z, cond)
+
+
+def loss_function(x, x_hat, mean, logvar, beta=0.1):
+    # Reconstruction loss (MSE for coordinates)
+    reconstruction_loss = F.mse_loss(x_hat, x, reduction='sum')
+    
+    # KL divergence
+    KL_divergence = -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())
+    
+    # Total loss with beta-VAE to encourage better disentanglement
+    total_loss = reconstruction_loss + beta * KL_divergence
+    
+    return total_loss, reconstruction_loss, KL_divergence

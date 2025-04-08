@@ -4,7 +4,7 @@ import orjson
 from collections import defaultdict
 from config import logging
 
-def load_jsonl_gz(file_path, single_object=True):
+def load_jsonl_gz(file_path, single_object=False):
     logging.info(f"Loading JSONL file: {file_path}")
     data = defaultdict(list)
     if not os.path.exists(file_path):

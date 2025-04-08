@@ -78,14 +78,13 @@ def plot_a_frame(J, filename):
     plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()
 
-
-def plot_a_frame_29_joints(J, filename, pre_defined_body_values = True):
+def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, pre_defined_body_values=True):
     J = np.array(J)
     if np.all(J == 0):
         return  # Skip entirely blank frames
 
-    J1 = J[:7, :]  # Body joints (7 joints)
-    J2 = J[7:, :]  # Hand joints (22 joints)
+    J1 = J[:7, :]   # Body joints (7 joints)
+    J2 = J[7:, :]   # Hand joints (22 joints)
 
     if pre_defined_body_values:
         J1[0] = RIGHT_SHOULDER_VALUE
@@ -94,7 +93,6 @@ def plot_a_frame_29_joints(J, filename, pre_defined_body_values = True):
         J1[5] = LEFT_HIP_VALUE
         J1[6] = NOSE_VALUE
 
-    # Define connections for each hand (based on new structure)
     single_hand_connections = [
         (0, 1), (1, 2),      # Finger 1
         (0, 3), (3, 4),      # Finger 2
@@ -103,88 +101,113 @@ def plot_a_frame_29_joints(J, filename, pre_defined_body_values = True):
         (0, 9), (9, 10),     # Finger 5
     ]
 
-    # Define body connections
-    upper_body_connections = [(0, 1), (1, 3), (0, 2), (0,4), (1,5)]
+    upper_body_connections = [(0, 1), (1, 3), (0, 2), (0, 4), (1, 5)]
 
-    plt.figure(figsize=(6, 6))
-    plt.gca().set_aspect('equal', adjustable='box')
+    fig = plt.figure(figsize=(6, 6))
+    ax = fig.add_axes([0, 0, 1, 1])  
+    ax.set_axis_off()
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_max, y_min)
 
-    # Function to check if a joint should be plotted
     def should_plot(joint):
         return not (joint[0] == 0 and joint[1] == 0)
 
-    # Plot left hand
-    left_hand_to_plot = [i for i in range(11) if should_plot(J2[i])]
-    plt.scatter(J2[left_hand_to_plot, 0], J2[left_hand_to_plot, 1], color='blue', s=10, label="Left Hand")
+    def is_valid_hand_joint(joint, threshold=1e-2):
+        return np.linalg.norm(joint) >= threshold
+
+    # Plot left hand (0 to 10 in J2)
+    left_hand_to_plot = [i for i in range(11) if is_valid_hand_joint(J2[i])]
+    ax.scatter(J2[left_hand_to_plot, 0], J2[left_hand_to_plot, 1], color='blue', s=10, label="Left Hand")
     for start, end in single_hand_connections:
-        if should_plot(J2[start]) and should_plot(J2[end]):
-            plt.plot([J2[start, 0], J2[end, 0]],
+        if is_valid_hand_joint(J2[start]) and is_valid_hand_joint(J2[end]):
+            ax.plot([J2[start, 0], J2[end, 0]],
                     [J2[start, 1], J2[end, 1]],
                     color='green', linewidth=1)
 
-    # Plot right hand
-    right_hand_to_plot = [i for i in range(11, 22) if should_plot(J2[i])]
-    plt.scatter(J2[right_hand_to_plot, 0], J2[right_hand_to_plot, 1], color='purple', s=10, label="Right Hand")
+    # Plot right hand (11 to 21 in J2)
+    right_hand_to_plot = [i for i in range(11, 22) if is_valid_hand_joint(J2[i])]
+    ax.scatter(J2[right_hand_to_plot, 0], J2[right_hand_to_plot, 1], color='purple', s=10, label="Right Hand")
     for start, end in single_hand_connections:
         start += 11
         end += 11
-        if should_plot(J2[start]) and should_plot(J2[end]):
-            plt.plot([J2[start, 0], J2[end, 0]],
+        if is_valid_hand_joint(J2[start]) and is_valid_hand_joint(J2[end]):
+            ax.plot([J2[start, 0], J2[end, 0]],
                     [J2[start, 1], J2[end, 1]],
                     color='orange', linewidth=1)
 
-    # Plot body landmarks, excluding (0,0) joints
+    # Plot body landmarks
     body_indices_to_plot = [i for i in [0, 1, 2, 3, 6] if should_plot(J1[i])]
-    plt.scatter(J1[body_indices_to_plot, 0], J1[body_indices_to_plot, 1], color='red', s=15, label="Body Landmarks")
+    ax.scatter(J1[body_indices_to_plot, 0], J1[body_indices_to_plot, 1], color='red', s=15, label="Body Landmarks")
 
-    # Plot body connections, excluding connections involving (0,0) joints
+    # Plot body connections
     for start, end in upper_body_connections:
         if should_plot(J1[start]) and should_plot(J1[end]):
-            plt.plot([J1[start, 0], J1[end, 0]],
+            ax.plot([J1[start, 0], J1[end, 0]],
                     [J1[start, 1], J1[end, 1]],
                     color='black', linewidth=2)
 
-    # Connect nose (body index 0) to midpoint of shoulders if both exist
+    # Connect nose to midpoint of shoulders
     if should_plot(J1[6]) and should_plot(J1[0]) and should_plot(J1[1]):
         midpoint = (J1[0] + J1[1]) / 2
-        plt.plot([J1[6, 0], midpoint[0]], 
-                [J1[6, 1], midpoint[1]], 
+        ax.plot([J1[6, 0], midpoint[0]],
+                [J1[6, 1], midpoint[1]],
                 color='black', linewidth=2, label="6th to Midpoint")
 
-    # Plot hand-to-body connections if both joints exist
-    if len(J2) > 0 and should_plot(J2[0]) and should_plot(J1[2]):
-        plt.plot([J2[0, 0], J1[2, 0]],
+    # Connect hands to body
+    if len(J2) > 0 and is_valid_hand_joint(J2[0]) and should_plot(J1[2]):
+        ax.plot([J2[0, 0], J1[2, 0]],
                 [J2[0, 1], J1[2, 1]],
                 color='purple', linestyle="dashed", linewidth=1.5)
 
-    if len(J2) > 11 and should_plot(J2[11]) and should_plot(J1[3]):
-        plt.plot([J2[11, 0], J1[3, 0]],
+    if len(J2) > 11 and is_valid_hand_joint(J2[11]) and should_plot(J1[3]):
+        ax.plot([J2[11, 0], J1[3, 0]],
                 [J2[11, 1], J1[3, 1]],
                 color='purple', linestyle="dashed", linewidth=1.5)
 
-    plt.gca().invert_yaxis()
-    plt.title("2D Projected Hand & Body Landmarks with Connections")
-    plt.axis("equal")
-    plt.xticks([])
-    plt.yticks([])
-
-    # # Changes to show axis values:
-    # plt.xticks(fontsize=8)  # Show x-axis ticks with font size 8
-    # plt.yticks(fontsize=8)  # Show y-axis ticks with font size 8
-    # plt.xlabel("X Coordinate", fontsize=10)  # Add x-axis label
-    # plt.ylabel("Y Coordinate", fontsize=10)  # Add y-axis label
-
-    plt.legend(loc="upper right")
-    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.savefig(filename, dpi=300, bbox_inches='tight', pad_inches=0)
     plt.close()
 
-def images_to_video_ffmpeg(image_folder, output_video, fps=30):
-    os.system(f"ffmpeg -framerate {fps} -i {image_folder}/frame_%d.png -c:v libx264 -pix_fmt yuv420p {output_video}")
 
+
+def images_to_video_ffmpeg(image_folder, output_video, fps=7):
+    os.system(f"ffmpeg -framerate {fps} -i {image_folder}/frame_%d.png -c:v libx264 -pix_fmt yuv420p -vf \"scale=trunc(iw/2)*2:trunc(ih/2)*2\" {output_video}")
+
+def calculate_global_limits(sequence):
+    all_joints = np.concatenate([frame for frame in sequence if not np.all(frame == 0)])
+    x_coords = all_joints[:, 0]
+    y_coords = all_joints[:, 1]
+    
+    x_center = (np.max(x_coords) + np.min(x_coords)) / 2
+    y_center = (np.max(y_coords) + np.min(y_coords)) / 2
+    
+    x_range = (np.max(x_coords) - np.min(x_coords)) * 1.2
+    y_range = (np.max(y_coords) - np.min(y_coords)) * 1.2
+    
+    limit = max(x_range, y_range) / 2
+    
+    return (x_center - limit, x_center + limit, 
+            y_center - limit, y_center + limit)
+
+
+def delete_frames(frame_path):
+    for filename in os.listdir(frame_path):
+            file_path = os.path.join(frame_path, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)  
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)  
+            except Exception as e:
+                logging.error(f"Failed to delete {file_path}. Reason: {e}")
+    
 
 def save_generated_sequence(generated_sequence, frame_path, video_path):
     os.makedirs(frame_path, exist_ok=True)
     valid_frame_count = 0
+
+    delete_frames(frame_path)
+
+    x_min, x_max, y_min, y_max = calculate_global_limits(generated_sequence)
 
     for i, frame in enumerate(generated_sequence):
         frame_array = np.array(frame)
@@ -193,10 +216,12 @@ def save_generated_sequence(generated_sequence, frame_path, video_path):
         if(NUM_JOINTS == 49):
             plot_a_frame(frame, f"{frame_path}/frame_{valid_frame_count}.png")
         else:
-            plot_a_frame_29_joints(frame, f"{frame_path}/frame_{valid_frame_count}.png")
+            plot_a_frame_29_joints(frame, f"{frame_path}/frame_{valid_frame_count}.png", x_min, x_max, y_min, y_max)
         valid_frame_count += 1
 
     logging.info(f"Saved {valid_frame_count} frames")
+    images_to_video_ffmpeg(frame_path, video_path)
+    logging.info(f"Saved video to {video_path}")
     
 
 

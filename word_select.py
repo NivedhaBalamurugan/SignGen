@@ -8,6 +8,35 @@ from data_processing import processed_data
 from collections import defaultdict
 from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
 from config import *
+import gzip
+
+def extract_glove_embeddings(glove_file_path, output_file_path, target_words):
+    target_words = set(target_words) if isinstance(target_words, list) else target_words
+    found_words = set()
+    
+    with open(glove_file_path, 'r', encoding='utf-8') as glove_file, \
+         open(output_file_path, 'w', encoding='utf-8') as out_file:
+        
+        for line in glove_file:
+            parts = line.split()
+            if not parts:
+                continue
+            word = parts[0]
+            if word in target_words:
+                out_file.write(line)
+                found_words.add(word)
+                if len(found_words) == len(target_words):
+                    break
+    
+    # Check for missing words
+    missing_words = target_words - found_words
+    if missing_words:
+        print(f"Warning: Missing embeddings for {len(missing_words)} words:")
+        print(', '.join(sorted(missing_words)))
+    else:
+        print(f"Successfully extracted all {len(target_words)} word embeddings")
+
+
 
 
 mp_hands = mp.solutions.hands
@@ -51,6 +80,9 @@ def get_frame_landmarks(frame):
         face_landmark = results_pose.pose_landmarks.landmark[0]
         body_landmarks[6] = [face_landmark.x, face_landmark.y]
 
+    palm_landmarks = np.round(palm_landmarks, 5).astype(FP_PRECISION)
+    body_landmarks = np.round(body_landmarks, 5).astype(FP_PRECISION)
+
     return palm_landmarks, body_landmarks
 
 
@@ -63,127 +95,52 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
         end_frame = total_frames
 
     frame_count = end_frame - start_frame + 1
-    
-    # Set up colors for different landmarks
-    HAND_COLORS = {
-        'thumb': (0, 255, 0),       # Green
-        'index': (255, 0, 0),       # Blue
-        'middle': (0, 0, 255),      # Red
-        'ring': (255, 255, 0),      # Cyan
-        'pinky': (255, 0, 255)      # Magenta
-    }
-    
-    BODY_COLORS = {
-        'shoulders': (255, 165, 0),  # Orange
-        'arms': (128, 0, 128),       # Purple
-        'face': (255, 255, 255)      # White
-    }
 
-    all_palm_landmarks = []
-    all_body_landmarks = []
-    
-    # Set window to be resizable
-    cv2.namedWindow('Video with Landmarks', cv2.WINDOW_NORMAL)
+    all_merged_landmarks = []  # To store merged landmarks for each frame
+
+    # # Set window to be resizable
+    # cv2.namedWindow('Video with Landmarks', cv2.WINDOW_NORMAL)
 
     for frame_index in range(1, total_frames + 1):
         res, frame = cap.read()
         if not res:
             break
-            
+
         if start_frame <= frame_index <= end_frame:
             # Process the frame
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             processed_frame = process_frame(frame_rgb)
-            
+
             # Get landmarks
             frame.flags.writeable = False
             palm_landmarks, body_landmarks = get_frame_landmarks(processed_frame)
             frame.flags.writeable = True
-            
-            # Create a copy of the frame for drawing
-            display_frame = frame.copy()
-            frame_height, frame_width = display_frame.shape[:2]
-            
-            # Draw hand landmarks with different colors for each finger
-            if np.any(palm_landmarks):
-                # Define finger groups (thumb: 0-4, index: 5-8, etc.)
-                finger_groups = {
-                    'thumb': [0, 1, 2, 3, 4],
-                    'index': [5, 6, 7, 8],
-                    'middle': [9, 10, 11, 12],
-                    'ring': [13, 14, 15, 16],
-                    'pinky': [17, 18, 19, 20]
-                }
-                
-                # For each hand (up to 2)
-                for hand_idx in range(2):
-                    offset = 21 * hand_idx
-                    
-                    # Draw each finger with its specific color
-                    for finger, indices in finger_groups.items():
-                        for idx in indices:
-                            if np.any(palm_landmarks[offset + idx]):
-                                x, y = int(palm_landmarks[offset + idx][0] * frame_width), int(palm_landmarks[offset + idx][1] * frame_height)
-                                cv2.circle(display_frame, (x, y), 5, HAND_COLORS[finger], -1)
-                                
-                                # Connect joints with lines (within fingers)
-                                if idx > 0 and idx % 4 != 0:  # Not the first joint of a finger
-                                    prev_x, prev_y = int(palm_landmarks[offset + idx - 1][0] * frame_width), int(palm_landmarks[offset + idx - 1][1] * frame_height)
-                                    cv2.line(display_frame, (x, y), (prev_x, prev_y), HAND_COLORS[finger], 2)
-            
-            # Draw body landmarks
-            if np.any(body_landmarks):
-                # Shoulders (indices 0-1)
-                for i in range(2):
-                    x, y = int(body_landmarks[i][0] * frame_width), int(body_landmarks[i][1] * frame_height)
-                    cv2.circle(display_frame, (x, y), 7, BODY_COLORS['shoulders'], -1)
-                
-                # Draw line between shoulders
-                if np.any(body_landmarks[0]) and np.any(body_landmarks[1]):
-                    left_x, left_y = int(body_landmarks[0][0] * frame_width), int(body_landmarks[0][1] * frame_height)
-                    right_x, right_y = int(body_landmarks[1][0] * frame_width), int(body_landmarks[1][1] * frame_height)
-                    cv2.line(display_frame, (left_x, left_y), (right_x, right_y), BODY_COLORS['shoulders'], 2)
-                
-                # Arms (indices 2-5)
-                for i in range(2, 6):
-                    x, y = int(body_landmarks[i][0] * frame_width), int(body_landmarks[i][1] * frame_height)
-                    cv2.circle(display_frame, (x, y), 7, BODY_COLORS['arms'], -1)
-                    
-                    # Connect joints (shoulders to elbows, elbows to wrists)
-                    if i in [2, 4]:  # Left/right elbow
-                        shoulder_idx = 0 if i == 2 else 1  # Left/right shoulder
-                        shoulder_x, shoulder_y = int(body_landmarks[shoulder_idx][0] * frame_width), int(body_landmarks[shoulder_idx][1] * frame_height)
-                        cv2.line(display_frame, (x, y), (shoulder_x, shoulder_y), BODY_COLORS['arms'], 2)
-                    
-                    if i in [3, 5]:  # Left/right wrist
-                        elbow_idx = 2 if i == 3 else 4  # Left/right elbow
-                        elbow_x, elbow_y = int(body_landmarks[elbow_idx][0] * frame_width), int(body_landmarks[elbow_idx][1] * frame_height)
-                        cv2.line(display_frame, (x, y), (elbow_x, elbow_y), BODY_COLORS['arms'], 2)
-                
-                # Face (index 6)
-                if np.any(body_landmarks[6]):
-                    x, y = int(body_landmarks[6][0] * frame_width), int(body_landmarks[6][1] * frame_height)
-                    cv2.circle(display_frame, (x, y), 10, BODY_COLORS['face'], -1)
-                    
-                    # Connect face to shoulders
-                    if np.any(body_landmarks[0]) and np.any(body_landmarks[1]):
-                        mid_shoulder_x = int((body_landmarks[0][0] + body_landmarks[1][0]) * frame_width / 2)
-                        mid_shoulder_y = int((body_landmarks[0][1] + body_landmarks[1][1]) * frame_height / 2)
-                        cv2.line(display_frame, (x, y), (mid_shoulder_x, mid_shoulder_y), BODY_COLORS['face'], 2)
-            
-            # Add frame info
-            cv2.putText(display_frame, f"Frame: {frame_index}/{total_frames}", (20, 30), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-            
-            # Store landmarks
-            all_palm_landmarks.append(palm_landmarks.tolist())
-            all_body_landmarks.append(body_landmarks.tolist())
 
-            # Display the frame with landmarks
-            cv2.imshow('Video with Landmarks', display_frame)
-            
+            # Merge palm and body landmarks for the current frame
+            merged_landmarks = np.vstack((body_landmarks, palm_landmarks))
+            merged_landmarks = np.round(merged_landmarks, 5).astype(FP_PRECISION)
+            all_merged_landmarks.append(merged_landmarks.tolist())
+
+
+            # # Create a copy of the frame for drawing
+            # display_frame = frame.copy()
+            # frame_height, frame_width = display_frame.shape[:2]
+
+            # # Draw merged landmarks
+            # for landmark in merged_landmarks:
+            #     if np.any(landmark):  # Check if the landmark is valid
+            #         x, y = int(landmark[0] * frame_width), int(landmark[1] * frame_height)
+            #         cv2.circle(display_frame, (x, y), 5, (0, 255, 255), -1)  # Yellow color for merged landmarks
+
+            # # Add frame info
+            # cv2.putText(display_frame, f"Frame: {frame_index}/{total_frames}", (20, 30),
+            #             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+            # # Display the frame with landmarks
+            # cv2.imshow('Video with Landmarks', display_frame)
+
             # Control playback speed (30ms delay, adjust as needed)
-            key = cv2.waitKey(30) 
+            key = cv2.waitKey(30)
             if key & 0xFF == ord('q'):  # Press 'q' to quit early
                 break
             elif key & 0xFF == ord('p'):  # Press 'p' to pause/play
@@ -191,16 +148,52 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
 
     cap.release()
     cv2.destroyAllWindows()
-    return all_palm_landmarks, all_body_landmarks, frame_count
+    return all_merged_landmarks, frame_count
+
+def get_landmarks(word):
+    merged_all_videos = []
+    for item in processed_data:
+        if item["gloss"] == word:
+            video_path = item["video_path"]
+            start_frame = item["frame_start"]
+            end_frame = item["frame_end"]
+            merged ,frame_count = get_video_landmarks(video_path, start_frame, end_frame)
+            merged_all_videos.append(merged)
+    return merged_all_videos
 
 
+def ensure_precision(data, decimals=5):
+    if isinstance(data, (list, np.ndarray)):
+        return [ensure_precision(x, decimals) for x in data]
+    elif isinstance(data, (float, np.floating)):
+        return float(f"{data:.{decimals}f}")
+    elif isinstance(data, dict):
+        return {k: ensure_precision(v, decimals) for k, v in data.items()}
+    return data
+
+def save_landmarks_to_jsonl(word_list, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
+    
+    for idx, word in enumerate(tqdm(word_list, desc="Processing words"), start=1):
+        output_file = os.path.join(output_dir, f"{idx}.jsonl.gz")
+        try:
+            video_data = get_landmarks(word)
+            video_data = ensure_precision(video_data)
+            word_entry = {word: video_data}
+            with gzip.open(output_file, 'wb') as f:
+                f.write(orjson.dumps(word_entry) + b'\n')
+            print(f"Completed word {word} (saved to {output_file})")
+        except Exception as e:
+            print(f"Error processing {word}: {str(e)}")
+            continue
+
+if __name__ == "__main__":
+    word_list = [ "movie","police","boy","money","animal","flower","mirror","star","book", "now","table","black","doctor","hat","time","computer","fine",
+        "chair","help","friend"]
+    output_dir = "Dataset/word_files"  
+    save_landmarks_to_jsonl(word_list, output_dir)
 
 
-word = "star"  # Replace with the word you want to search
-for item in processed_data:
-    if item["gloss"] == word:
-        video_path = item["video_path"]
-        start_frame = item["frame_start"]
-        end_frame = item["frame_end"]
-
-        get_video_landmarks(video_path, start_frame, end_frame)
+    # glove_file = 'Dataset/glove/glove.6B.50d.txt'  
+    # output_file = 'Dataset/custom_glove_20words.50d.txt'
+    # extract_glove_embeddings(glove_file, output_file, word_list)

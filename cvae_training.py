@@ -31,11 +31,7 @@ EVAL_FREQUENCY = 10
 PREFETCH_FACTOR = 2
 MEMORY_THRESHOLD = 85
 
-class nullcontext:
-    def __enter__(self):
-        return self
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
+
 
 warnings.filterwarnings("ignore")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
