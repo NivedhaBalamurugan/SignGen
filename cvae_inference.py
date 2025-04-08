@@ -3,59 +3,60 @@ import numpy as np
 import os
 import logging
 import warnings
-from architectures.cvae import ConditionalVAE
+from architectures.cvae import *
 from config import *
 import show_output
 from utils.data_utils import *
-from skimage.metrics import structural_similarity as ssim
-from sklearn.manifold import TSNE
-from cgan_inference import main_c
+
 
 warnings.filterwarnings("ignore")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def generate_sequence(asl_word, model):
+
+def generate_sequence(model, condition_embedding, latent_size=64):
     model.eval()
-    embedding_matrix = load_word_embeddings()
-    cond_vector = embedding_matrix.get(asl_word, np.zeros(EMBEDDING_DIM))
-    cond_vector = torch.tensor(cond_vector, dtype=torch.float32).to(device)
-    
-    z = torch.randn(1, CVAE_LATENT_DIM).to(device)
+    model.to(device)
+    if len(condition_embedding.shape) == 1:
+        condition_embedding = condition_embedding.unsqueeze(0)
+    condition_embedding = condition_embedding.to(device)
     
     with torch.no_grad():
-        generated_sequence = model.decoder(z, cond_vector.unsqueeze(0))
-    
-    return generated_sequence.squeeze(0).cpu().numpy()
+        z = torch.randn(1, latent_size).to(device)
+        # z_conditioned = torch.cat([z, condition_embedding], dim=1)
+        # generated_sequence = model.decode(z_conditioned)
+        generated_sequence = model.decode(z, condition_embedding)
+        return generated_sequence.squeeze(0)
 
 def get_cvae_sequence(asl_word, isSave_Video, CVAE_MODEL_PATH):
-    model_path = os.path.join(CVAE_MODEL_PATH, "cvae.pth")
+    model_path = os.path.join(CVAE_MODEL_PATH, "cvae_epoch_83.pth")
     if not os.path.exists(model_path):
         logging.error("Trained model file not found.")
         return None
 
     logging.info("Loading trained model...")
-    model = ConditionalVAE(
-        input_dim=CVAE_INPUT_DIM,
-        hidden_dim=CVAE_HIDDEN_DIM,
-        latent_dim=CVAE_LATENT_DIM,
-        cond_dim=EMBEDDING_DIM,
-        output_dim=CVAE_INPUT_DIM,
-        seq_len=MAX_FRAMES
+    model = CVAE(
+        num_frames=MAX_FRAMES,
+        num_joints=NUM_JOINTS,
+        latent_size=latent_size,
+        embedding_dim=EMBEDDING_DIM
     ).to(device)
-    
-    checkpoint = torch.load(model_path, map_location=device)
-    model.load_state_dict(checkpoint)
+        
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     logging.info("Model loaded successfully.")
+
+    embedding_matrix = load_word_embeddings()
+    cond_vector = embedding_matrix.get(asl_word, np.zeros(EMBEDDING_DIM))
+    cond_vector = torch.tensor(cond_vector, dtype=torch.float32).to(device)
     
-    generated_skeleton = generate_sequence(asl_word, model)
+    generated_skeleton = generate_sequence(model, cond_vector, latent_size=latent_size)
     logging.info(f"Generated sequence shape: {generated_skeleton.shape}")
-    
+
     if isSave_Video:
         show_output.save_generated_sequence(generated_skeleton, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO) 
     
-    return generated_skeleton
+    return generated_skeleton   
 
 if __name__ == "__main__":
-    INPUT_WORD = "before"
-    get_cvae_sequences(INPUT_WORD,1, main_c(INPUT_WORD,0))
+    INPUT_WORD = "police"
+    get_cvae_sequence(INPUT_WORD, True, CVAE_MODEL_PATH)

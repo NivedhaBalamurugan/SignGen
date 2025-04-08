@@ -6,12 +6,12 @@ import show_output
 from config import *
 from utils.data_utils import convert_line_segments_to_skeleton, load_word_embeddings
 
-INPUT_WORD = "book"
+INPUT_WORD = "fine"
 MODEL_NAME = "revert_joints"
 EPOCH_NO = "22"
-generator = tf.keras.models.load_model("Models\cgan_model\checkpoints\generator_epoch22_loss0.0992.keras")
+generator = tf.keras.models.load_model("Models\cgan_model\generator_epoch20_loss0.7656.keras")
 
-IS_SEGMENTS = False
+IS_SEGMENTS = True
 
 def generate_skeleton_sequence(word):
     word_embeddings = load_word_embeddings()
@@ -39,12 +39,12 @@ def get_cgan_sequence(word, isSave_Video):
     else:
         print(f"Generated Skeleton Shape for '{word}': {generated_sequence.shape}")
     
-    save_path = OUTPUTS_PATH
-    os.makedirs(save_path, exist_ok=True)
-    json_filepath = os.path.join(save_path, f"generated_skeleton_{word}.json")
-    with open(json_filepath, 'w') as json_file:
-        json.dump(generated_sequence.tolist(), json_file)
-        print("Saved successfully")
+    # save_path = OUTPUTS_PATH
+    # os.makedirs(save_path, exist_ok=True)
+    # json_filepath = os.path.join(save_path, f"generated_skeleton_{word}.json")
+    # with open(json_filepath, 'w') as json_file:
+    #     json.dump(generated_sequence.tolist(), json_file)
+    #     print("Saved successfully")
     
     if isSave_Video:
         frames_path = os.path.join(OUTPUTS_PATH, f"cgan_{MODEL_NAME}_e{EPOCH_NO}_{INPUT_WORD}")

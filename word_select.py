@@ -8,6 +8,35 @@ from data_processing import processed_data
 from collections import defaultdict
 from utils.jsonl_utils import load_jsonl_gz, save_jsonl_gz
 from config import *
+import gzip
+
+def extract_glove_embeddings(glove_file_path, output_file_path, target_words):
+    target_words = set(target_words) if isinstance(target_words, list) else target_words
+    found_words = set()
+    
+    with open(glove_file_path, 'r', encoding='utf-8') as glove_file, \
+         open(output_file_path, 'w', encoding='utf-8') as out_file:
+        
+        for line in glove_file:
+            parts = line.split()
+            if not parts:
+                continue
+            word = parts[0]
+            if word in target_words:
+                out_file.write(line)
+                found_words.add(word)
+                if len(found_words) == len(target_words):
+                    break
+    
+    # Check for missing words
+    missing_words = target_words - found_words
+    if missing_words:
+        print(f"Warning: Missing embeddings for {len(missing_words)} words:")
+        print(', '.join(sorted(missing_words)))
+    else:
+        print(f"Successfully extracted all {len(target_words)} word embeddings")
+
+
 
 
 mp_hands = mp.solutions.hands
@@ -51,6 +80,9 @@ def get_frame_landmarks(frame):
         face_landmark = results_pose.pose_landmarks.landmark[0]
         body_landmarks[6] = [face_landmark.x, face_landmark.y]
 
+    palm_landmarks = np.round(palm_landmarks, 5).astype(FP_PRECISION)
+    body_landmarks = np.round(body_landmarks, 5).astype(FP_PRECISION)
+
     return palm_landmarks, body_landmarks
 
 
@@ -85,8 +117,10 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
             frame.flags.writeable = True
 
             # Merge palm and body landmarks for the current frame
-            merged_landmarks = np.vstack((palm_landmarks, body_landmarks))
+            merged_landmarks = np.vstack((body_landmarks, palm_landmarks))
+            merged_landmarks = np.round(merged_landmarks, 5).astype(FP_PRECISION)
             all_merged_landmarks.append(merged_landmarks.tolist())
+
 
             # # Create a copy of the frame for drawing
             # display_frame = frame.copy()
@@ -117,30 +151,49 @@ def get_video_landmarks(videoPath, start_frame, end_frame):
     return all_merged_landmarks, frame_count
 
 def get_landmarks(word):
+    merged_all_videos = []
     for item in processed_data:
         if item["gloss"] == word:
             video_path = item["video_path"]
             start_frame = item["frame_start"]
             end_frame = item["frame_end"]
-
             merged ,frame_count = get_video_landmarks(video_path, start_frame, end_frame)
+            merged_all_videos.append(merged)
+    return merged_all_videos
 
 
-def save_landmarks_to_jsonl(word_list, output_file):
-    with gzip.open(output_file, 'wb') as f:
-        for word in tqdm(word_list, desc="Processing words"):
-            try:
-                video_data = get_landmarks(word)
-                word_entry = {word: video_data}
+def ensure_precision(data, decimals=5):
+    if isinstance(data, (list, np.ndarray)):
+        return [ensure_precision(x, decimals) for x in data]
+    elif isinstance(data, (float, np.floating)):
+        return float(f"{data:.{decimals}f}")
+    elif isinstance(data, dict):
+        return {k: ensure_precision(v, decimals) for k, v in data.items()}
+    return data
+
+def save_landmarks_to_jsonl(word_list, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
+    
+    for idx, word in enumerate(tqdm(word_list, desc="Processing words"), start=1):
+        output_file = os.path.join(output_dir, f"{idx}.jsonl.gz")
+        try:
+            video_data = get_landmarks(word)
+            video_data = ensure_precision(video_data)
+            word_entry = {word: video_data}
+            with gzip.open(output_file, 'wb') as f:
                 f.write(orjson.dumps(word_entry) + b'\n')
-            except Exception as e:
-                print(f"Error processing {word}: {str(e)}")
-                continue
-            print(f"completed word {word}")
+            print(f"Completed word {word} (saved to {output_file})")
+        except Exception as e:
+            print(f"Error processing {word}: {str(e)}")
+            continue
 
 if __name__ == "__main__":
     word_list = [ "movie","police","boy","money","animal","flower","mirror","star","book", "now","table","black","doctor","hat","time","computer","fine",
         "chair","help","friend"]
-    output_jsonl_path = "Dataset\new_words_extracted.jsonl.gz"  
-    save_landmarks_to_jsonl(words_to_process, output_jsonl_path)
-   
+    output_dir = "Dataset/word_files"  
+    save_landmarks_to_jsonl(word_list, output_dir)
+
+
+    # glove_file = 'Dataset/glove/glove.6B.50d.txt'  
+    # output_file = 'Dataset/custom_glove_20words.50d.txt'
+    # extract_glove_embeddings(glove_file, output_file, word_list)
