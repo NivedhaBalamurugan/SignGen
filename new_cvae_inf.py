@@ -1,8 +1,6 @@
 import torch
 import numpy as np
 from architectures.cvae import *  # Import your model class
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import show_output
 from config import *
 from utils.data_utils import load_word_embeddings
@@ -56,9 +54,9 @@ def main(gloss):
     print(f"Generated sequence for '{gloss}':", sequence.shape)  
     generated_sign = np.squeeze(sequence, axis=0) 
     show_output.save_generated_sequence(generated_sign, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
-    
+    # print(generated_sign[10,0:28])
     return generated_sign
 
     
 if __name__ == "__main__":
-    main("book")
+    main("fine")
