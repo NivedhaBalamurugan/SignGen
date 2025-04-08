@@ -1,5 +1,5 @@
 import tensorflow as tf
-from keras.layers import GRU, Dense, Input, Reshape, TimeDistributed, Bidirectional, UpSampling1D
+from keras.layers import GRU, Dense, Input, Reshape, TimeDistributed, Bidirectional, UpSampling1D, Multiply, LSTM
 from keras.models import Model
 from keras.layers import Dropout, BatchNormalization, Reshape, Conv1D, LeakyReLU, Concatenate, Lambda, Dot
 from config import *
@@ -58,7 +58,7 @@ def build_discriminator():
     # Add attention to word features
     word_features_flat = Reshape((MAX_FRAMES, NUM_JOINTS * 64))(word_features)
     word_attention = Dense(1, activation='sigmoid')(word_features_flat)
-    x = x * word_attention
+    x = Multiply()([x, word_attention])
     
     # Process joint relationships with 1D convolutions
     x = Conv1D(256, kernel_size=3, strides=1, padding='same')(x)
@@ -68,14 +68,15 @@ def build_discriminator():
     # Add word features back via concatenation
     x = Concatenate()([x, word_features_flat])
     
-    # GRU layers for temporal processing
-    x = Bidirectional(GRU(128, return_sequences=True))(x)
-    x = Bidirectional(GRU(128, return_sequences=False))(x)
+    # Replace GRU with LSTM which has better CuDNN support
+    x = Bidirectional(LSTM(128, return_sequences=True, unroll=True))(x)
+    x = Bidirectional(LSTM(128, return_sequences=False, unroll=True))(x)
     
     # CHANGE: Add a condition matching layer
     condition_check = Dense(EMBEDDING_DIM, activation='relu')(x)
     word_vector_only = Lambda(lambda x: x[:, 0, 0, :])(word_part)
     condition_matching = Dot(axes=1)([condition_check, word_vector_only])
+    condition_matching = Reshape((1,))(condition_matching)
     
     # Dense classification layers
     x = Dense(256, activation="relu")(x)

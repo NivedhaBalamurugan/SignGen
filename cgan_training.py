@@ -1,7 +1,6 @@
 import os
 import glob
 import gc
-import psutil
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
@@ -15,42 +14,29 @@ from scipy.stats import entropy
 
 MODEL_NAME = "enhance_embedding_in_disc"
 
-FILES_PER_BATCH = 1
-MAX_SAMPLES_PER_BATCH = 1000
-MEMORY_THRESHOLD = 85
-
-def check_memory():
-    memory_percent = psutil.Process().memory_percent()
-    if memory_percent > MEMORY_THRESHOLD:
-        logging.warning(f"Memory usage high ({memory_percent:.1f}%). Clearing memory...")
-        gc.collect()
-        return True
-    return False
-
-def process_file_batch(files, word_embeddings):
-    logging.info(f"Processing files: {[os.path.basename(f) for f in files]}")
-    skeleton_data = load_skeleton_sequences(files)
-    if not skeleton_data:
-        return None, None
-    sequences, vectors = prepare_training_data(skeleton_data, word_embeddings)
-    del skeleton_data
-    gc.collect()
-    return sequences, vectors
-
-def process_data_batches(jsonl_files, word_embeddings):
+def load_all_data(jsonl_gz_files, word_embeddings):
+    logging.info(f"Loading data from {len(jsonl_gz_files)} files")
     total_sequences = []
     total_vectors = []
-    num_batches = -(-len(jsonl_files)//FILES_PER_BATCH)
-    with tqdm(total=num_batches, desc="Processing files") as pbar:
-        for i in range(0, len(jsonl_files), FILES_PER_BATCH):
-            file_batch = jsonl_files[i:i + FILES_PER_BATCH]
-            sequences, vectors = process_file_batch(file_batch, word_embeddings)
-            if sequences is not None:
-                total_sequences.extend(sequences)
-                total_vectors.extend(vectors)
-            check_memory()
-            pbar.update(1)
-    return total_sequences, total_vectors
+    
+    with tqdm(total=len(jsonl_gz_files), desc="Loading files") as pbar:
+        for file_path in jsonl_gz_files:
+            try:
+                logging.info(f"Processing file: {os.path.basename(file_path)}")
+                skeleton_data = load_skeleton_sequences([file_path])
+                if skeleton_data:
+                    sequences, vectors = prepare_training_data(skeleton_data, word_embeddings)
+                    total_sequences.extend(sequences)
+                    total_vectors.extend(vectors)
+                del skeleton_data
+                gc.collect()
+                pbar.update(1)
+            except Exception as e:
+                logging.error(f"Error processing file {file_path}: {e}")
+                pbar.update(1)
+                continue
+                
+    return np.array(total_sequences), np.array(total_vectors)
 
 def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors_expanded):
     """Calculate gradient penalty for WGAN-GP"""
@@ -115,10 +101,13 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     total_disc_loss = 0.0
 
     num_samples = word_vectors.shape[0]
-    chunks_per_epoch = max(1, num_samples // MAX_SAMPLES_PER_BATCH + (1 if num_samples % MAX_SAMPLES_PER_BATCH > 0 else 0))
+    steps_per_epoch = num_samples // batch_size + (1 if num_samples % batch_size > 0 else 0)
 
-    logging.info(f"Training with {num_samples} samples, {num_samples//batch_size + (1 if num_samples % batch_size > 0 else 0)} batches per epoch")
+    logging.info(f"Training with {num_samples} samples, {steps_per_epoch} steps per epoch")
 
+    # Create TensorFlow dataset with shuffling
+    train_dataset = tf.data.Dataset.from_tensor_slices((word_vectors, skeleton_sequences))
+    
     best_loss = float('inf')
     patience_counter = 0
     best_generator_weights = None
@@ -204,6 +193,10 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             model.weights[i].assign(weight)
 
     for epoch in range(epochs):
+        # Shuffle data for each epoch - critical for preventing mode collapse
+        shuffled_dataset = train_dataset.shuffle(buffer_size=min(50000, num_samples), reshuffle_each_iteration=True)
+        batched_dataset = shuffled_dataset.batch(batch_size, drop_remainder=False)
+        
         epoch_gen_loss = tf.keras.metrics.Mean()
         epoch_disc_loss = tf.keras.metrics.Mean()
         epoch_adv_loss = tf.keras.metrics.Mean()
@@ -213,72 +206,29 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         epoch_anatomical_loss = tf.keras.metrics.Mean()
         epoch_semantic_loss = tf.keras.metrics.Mean()
 
-        for chunk_idx in range(chunks_per_epoch):
-            chunk_start = chunk_idx * MAX_SAMPLES_PER_BATCH
-            chunk_end = min(chunk_start + MAX_SAMPLES_PER_BATCH, num_samples)
-
-            word_vectors_chunk = word_vectors[chunk_start:chunk_end]
-            skeleton_sequences_chunk = skeleton_sequences[chunk_start:chunk_end]
-
-            chunk_size = chunk_end - chunk_start
-            full_batches = chunk_size // batch_size
-            has_partial_batch = chunk_size % batch_size > 0
-            chunk_batches = full_batches + (1 if has_partial_batch else 0)
-
-            with tqdm(total=chunk_batches, desc=f"Epoch {epoch+1}/{epochs} Chunk {chunk_idx+1}/{chunks_per_epoch}") as pbar:
-                for i in range(full_batches):
-                    if check_memory():
-                        logging.info("Cleared memory during training")
-                    try:
-                        batch_start = i * batch_size
-                        batch_end = batch_start + batch_size
-                        word_batch = word_vectors_chunk[batch_start:batch_end]
-                        skeleton_batch = skeleton_sequences_chunk[batch_start:batch_end]
-                        gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss = train_step(word_batch, skeleton_batch)
-                        
-                        epoch_gen_loss.update_state(gen_loss)
-                        epoch_disc_loss.update_state(disc_loss)
-                        epoch_adv_loss.update_state(adv_loss)
-                        epoch_mse_loss.update_state(mse_loss)
-                        epoch_bone_loss.update_state(bone_loss)
-                        epoch_motion_loss.update_state(motion_loss)
-                        epoch_anatomical_loss.update_state(anatomical_loss)
-                        epoch_semantic_loss.update_state(semantic_loss)
-                        
-                        pbar.set_postfix({
-                            'gen_loss': f'{gen_loss:.4f}', 
-                            'disc_loss': f'{disc_loss:.4f}'
-                        })
-                        pbar.update(1)
-                    except Exception as e:
-                        logging.error(f"Error in training batch: {e}")
-                        continue
-                
-                if has_partial_batch:
-                    if check_memory():
-                        logging.info("Cleared memory during training")
-                    try:
-                        batch_start = full_batches * batch_size
-                        word_batch = word_vectors_chunk[batch_start:]
-                        skeleton_batch = skeleton_sequences_chunk[batch_start:]
-                        gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss = train_step(word_batch, skeleton_batch)
-                        
-                        epoch_gen_loss.update_state(gen_loss)
-                        epoch_disc_loss.update_state(disc_loss)
-                        epoch_adv_loss.update_state(adv_loss)
-                        epoch_mse_loss.update_state(mse_loss)
-                        epoch_bone_loss.update_state(bone_loss)
-                        epoch_motion_loss.update_state(motion_loss)
-                        epoch_anatomical_loss.update_state(anatomical_loss)
-                        epoch_semantic_loss.update_state(semantic_loss)
-                        
-                        pbar.set_postfix({'gen_loss': f'{gen_loss:.4f}', 'disc_loss': f'{disc_loss:.4f}'})
-                        pbar.update(1)
-                    except Exception as e:
-                        logging.error(f"Error in training partial batch: {e}")
-
-            del word_vectors_chunk, skeleton_sequences_chunk
-            gc.collect()
+        with tqdm(total=steps_per_epoch, desc=f"Epoch {epoch+1}/{epochs}") as pbar:
+            for word_batch, skeleton_batch in batched_dataset:
+                try:
+                    gen_loss, disc_loss, adv_loss, mse_loss, bone_loss, motion_loss, anatomical_loss, semantic_loss = train_step(word_batch, skeleton_batch)
+                    
+                    epoch_gen_loss.update_state(gen_loss)
+                    epoch_disc_loss.update_state(disc_loss)
+                    epoch_adv_loss.update_state(adv_loss)
+                    epoch_mse_loss.update_state(mse_loss)
+                    epoch_bone_loss.update_state(bone_loss)
+                    epoch_motion_loss.update_state(motion_loss)
+                    epoch_anatomical_loss.update_state(anatomical_loss)
+                    epoch_semantic_loss.update_state(semantic_loss)
+                    
+                    pbar.set_postfix({
+                        'gen_loss': f'{gen_loss:.4f}', 
+                        'disc_loss': f'{disc_loss:.4f}'
+                    })
+                    pbar.update(1)
+                except Exception as e:
+                    logging.error(f"Error in training batch: {e}")
+                    pbar.update(1)
+                    continue
 
         epoch_gen_loss_value = epoch_gen_loss.result().numpy()
         epoch_disc_loss_value = epoch_disc_loss.result().numpy()
@@ -361,31 +311,20 @@ def main():
     if not word_embeddings or not validate_word_embeddings(word_embeddings):
         return
 
-    jsonl_files = sorted(glob.glob(FINAL_JSONL_PATHS))
-    if not jsonl_files:
-        logging.error(f"No JSONL files found matching pattern: {FINAL_JSONL_PATHS}")
+    jsonl_gz_files = sorted(glob.glob(FINAL_JSONL_GZ_PATHS))
+    if not jsonl_gz_files:
+        logging.error(f"No JSONL files found matching pattern: {FINAL_JSONL_GZ_PATHS}")
         return
 
-    total_sequences = []
-    total_vectors = []
+    all_skeleton_sequences, all_word_vectors = load_all_data(jsonl_gz_files, word_embeddings)
 
-    for i in range(0, len(jsonl_files), FILES_PER_BATCH):
-        file_batch = jsonl_files[i:i + FILES_PER_BATCH]
-        logging.info(f"Processing batch {i//FILES_PER_BATCH + 1}/{-(-len(jsonl_files)//FILES_PER_BATCH)}")
-        sequences, vectors = process_file_batch(file_batch, word_embeddings)
-        if sequences is not None:
-            total_sequences.extend(sequences)
-            total_vectors.extend(vectors)
-        check_memory()
-
-    if not total_sequences:
+    if len(all_skeleton_sequences) == 0:
         logging.error("No valid sequences loaded")
         return
 
-    all_skeleton_sequences = np.array(total_sequences)
-    all_word_vectors = np.array(total_vectors)
+    logging.info(f"Loaded {len(all_skeleton_sequences)} sequences for training")
 
-    del total_sequences, total_vectors, word_embeddings
+    del word_embeddings
     gc.collect()
 
     generator = build_generator()
@@ -400,10 +339,16 @@ def main():
         if success:
             save_model_and_history(CGAN_MODEL_PATH, generator, history)
             save_model_and_history(CGAN_DIS_PATH, discriminator)
-            generated_skeletons = generator(all_word_vectors)
-            real_skeletons = all_skeleton_sequences
-            pkd_score = calculate_pkd(real_skeletons, generated_skeletons)
-            kld_score = calculate_kld(real_skeletons.flatten(), generated_skeletons.flatten())
+            
+            num_eval_samples = min(1000, len(all_word_vectors))
+            eval_indices = np.random.choice(len(all_word_vectors), num_eval_samples, replace=False)
+            eval_vectors = all_word_vectors[eval_indices]
+            eval_real = all_skeleton_sequences[eval_indices]
+            
+            generated_skeletons = generator(eval_vectors)
+            pkd_score = calculate_pkd(eval_real, generated_skeletons)
+            kld_score = calculate_kld(eval_real.flatten(), generated_skeletons.flatten())
+
             diversity_score = calculate_diversity_score(generated_skeletons)
             logging.info(f"Per-Keypoint Distance (PKD): {pkd_score:.4f}")
             logging.info(f"KL Divergence (KLD): {kld_score:.4f}")
