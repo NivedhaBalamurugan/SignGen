@@ -12,7 +12,7 @@ from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import *
 from scipy.stats import entropy
 
-MODEL_NAME = "enhance_embedding_in_disc"
+MODEL_NAME = "improve_attempt"
 
 def load_all_data(jsonl_gz_files, word_embeddings):
     logging.info(f"Loading data from {len(jsonl_gz_files)} files")
@@ -119,7 +119,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         noise = tf.random.normal([actual_batch_size, CGAN_NOISE_DIM], dtype=FP_PRECISION)
         word_vector_batch = tf.cast(word_vector_batch, FP_PRECISION)
         generator_input = tf.concat([noise, word_vector_batch], axis=1)
-    
+        
         with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
             generated_skeleton = generator(generator_input, training=True)
             real_skeleton_batch = tf.cast(real_skeleton_batch, FP_PRECISION)
@@ -151,6 +151,10 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             
             # MSE reconstruction loss
             mse_loss = tf.reduce_mean(tf.square(generated_skeleton - real_skeleton_batch))
+
+            # Hand-focused losses (new)
+            hand_focused_mse = hand_focused_mse_loss(real_skeleton_batch, generated_skeleton)
+            hand_motion_loss = hand_motion_consistency_loss(generated_skeleton)
             
             # Semantic loss to ensure similar words have similar motions
             semantic_loss = semantic_consistency_loss(generated_skeleton, word_vector_batch)
@@ -158,13 +162,14 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
             # Combine discriminator loss components
             disc_loss = disc_adv_loss + 10.0 * gp
             
-            # Combine generator loss components with meaningful weights
-            # The key is to ensure these weights don't lead to components canceling each other
+            # Combine generator loss components with meaningful weights - with hand focus
             gen_loss = (
                 1.0 * gen_adv_loss +       # Adversarial loss
-                10.0 * mse_loss +          # Reconstruction loss (high weight)
+                8.0 * hand_focused_mse +    # Hand-focused reconstruction loss
+                3.0 * mse_loss +           # Regular reconstruction loss
                 5.0 * bone_loss +          # Bone length consistency
-                2.0 * motion_loss +        # Motion smoothness 
+                2.0 * motion_loss +        # General motion smoothness
+                5.0 * hand_motion_loss +   # Hand motion smoothness
                 3.0 * anatomical_loss +    # Anatomical plausibility
                 2.0 * semantic_loss        # Semantic consistency
             )

@@ -27,8 +27,17 @@ def build_generator():
     x = TimeDistributed(Dense(128, activation="relu"))(x)
     x = UpSampling1D(2)(x)
     
-    # Final dense layers to generate coordinates
-    x = TimeDistributed(Dense(NUM_JOINTS * NUM_COORDINATES, activation="tanh"))(x)
+    # Split into body and hand branches
+    upper_body_branch = TimeDistributed(Dense(7 * NUM_COORDINATES, activation="tanh"))(x)
+    left_hand_branch = TimeDistributed(Dense(128, activation="relu"))(x)
+    left_hand_branch = TimeDistributed(Dense(11 * NUM_COORDINATES, activation="tanh"))(left_hand_branch)
+    right_hand_branch = TimeDistributed(Dense(128, activation="relu"))(x)
+    right_hand_branch = TimeDistributed(Dense(11 * NUM_COORDINATES, activation="tanh"))(right_hand_branch)
+    
+    # Concatenate all branches
+    x = Concatenate(axis=2)([upper_body_branch, left_hand_branch, right_hand_branch])
+    
+    # Reshape to final output format
     outputs = Reshape((MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES))(x[:, :MAX_FRAMES])
     
     return Model(inputs, outputs)
@@ -48,31 +57,39 @@ def build_discriminator():
     # Reshape skeleton for processing
     x = Reshape((MAX_FRAMES, NUM_JOINTS * NUM_COORDINATES))(skeleton_part)
     
-    # 1D convolutions across time dimension
-    x = Conv1D(128, kernel_size=5, strides=1, padding='same')(x)
-    x = LeakyReLU(0.2)(x)
-    x = Conv1D(256, kernel_size=5, strides=1, padding='same')(x)
-    x = LeakyReLU(0.2)(x)
-    x = BatchNormalization()(x)
+    # Extract different body parts
+    upper_body = Lambda(lambda x: x[:, :, :7*NUM_COORDINATES])(x)
+    left_hand = Lambda(lambda x: x[:, :, 7*NUM_COORDINATES:18*NUM_COORDINATES])(x)
+    right_hand = Lambda(lambda x: x[:, :, 18*NUM_COORDINATES:])(x)
     
-    # Add attention to word features
-    word_features_flat = Reshape((MAX_FRAMES, NUM_JOINTS * 64))(word_features)
-    word_attention = Dense(1, activation='sigmoid')(word_features_flat)
-    x = Multiply()([x, word_attention])
+    # Process different parts with different capacities
+    upper_body_features = Conv1D(64, kernel_size=5, strides=1, padding='same')(upper_body)
+    upper_body_features = LeakyReLU(0.2)(upper_body_features)
     
-    # Process joint relationships with 1D convolutions
-    x = Conv1D(256, kernel_size=3, strides=1, padding='same')(x)
-    x = LeakyReLU(0.2)(x)
+    # More capacity for hands
+    left_hand_features = Conv1D(128, kernel_size=3, strides=1, padding='same')(left_hand)
+    left_hand_features = LeakyReLU(0.2)(left_hand_features)
+    left_hand_features = Conv1D(128, kernel_size=3, strides=1, padding='same')(left_hand_features)
+    left_hand_features = LeakyReLU(0.2)(left_hand_features)
+    
+    right_hand_features = Conv1D(128, kernel_size=3, strides=1, padding='same')(right_hand)
+    right_hand_features = LeakyReLU(0.2)(right_hand_features)
+    right_hand_features = Conv1D(128, kernel_size=3, strides=1, padding='same')(right_hand_features)
+    right_hand_features = LeakyReLU(0.2)(right_hand_features)
+    
+    # Concatenate features from different body parts
+    x = Concatenate()([upper_body_features, left_hand_features, right_hand_features])
     x = BatchNormalization()(x)
     
     # Add word features back via concatenation
+    word_features_flat = Reshape((MAX_FRAMES, NUM_JOINTS * 64))(word_features)
     x = Concatenate()([x, word_features_flat])
     
-    # Replace GRU with LSTM which has better CuDNN support
+    # Bidirectional LSTM for temporal relationships
     x = Bidirectional(LSTM(128, return_sequences=True, unroll=True))(x)
     x = Bidirectional(LSTM(128, return_sequences=False, unroll=True))(x)
     
-    # CHANGE: Add a condition matching layer
+    # Add a condition matching layer
     condition_check = Dense(EMBEDDING_DIM, activation='relu')(x)
     word_vector_only = Lambda(lambda x: x[:, 0, 0, :])(word_part)
     condition_matching = Dot(axes=1)([condition_check, word_vector_only])
@@ -200,3 +217,63 @@ def semantic_consistency_loss(generated_skeletons, word_vectors):
     
     # Loss is higher when word similarity doesn't match motion similarity
     return tf.reduce_mean(tf.square(word_similarities - skeleton_similarities))
+
+def hand_motion_consistency_loss(skeletons):
+    """
+    Ensures hand motion is consistent and smooth
+    """
+    # Left hand indices (wrist + fingers)
+    left_hand_indices = tf.constant(list(range(7, 18)))
+    # Right hand indices (wrist + fingers)
+    right_hand_indices = tf.constant(list(range(18, 29)))
+    
+    # Extract hand landmarks using tf.gather
+    left_hand = tf.gather(skeletons, left_hand_indices, axis=2)
+    right_hand = tf.gather(skeletons, right_hand_indices, axis=2)
+    
+    # Calculate velocity (first derivative)
+    left_velocity = left_hand[:, 1:] - left_hand[:, :-1]
+    right_velocity = right_hand[:, 1:] - right_hand[:, :-1]
+    
+    # Calculate acceleration (second derivative)
+    left_accel = left_velocity[:, 1:] - left_velocity[:, :-1]
+    right_accel = right_velocity[:, 1:] - right_velocity[:, :-1]
+    
+    # Penalize sudden changes in acceleration (jerk)
+    left_jerk = left_accel[:, 1:] - left_accel[:, :-1]
+    right_jerk = right_accel[:, 1:] - right_accel[:, :-1]
+    
+    # Calculate loss as mean squared jerk
+    loss = tf.reduce_mean(tf.square(left_jerk)) + tf.reduce_mean(tf.square(right_jerk))
+    
+    return loss
+
+def hand_focused_mse_loss(real_skeletons, generated_skeletons):
+    """
+    MSE loss that puts more weight on hand landmarks
+    """
+    # Define joint importance weights - higher for hands
+    joint_weights = np.ones(NUM_JOINTS)
+    
+    # Indices for different body parts
+    upper_body_indices = [0, 1, 2, 3, 4, 5, 6]  # shoulders, elbows, nose, hips
+    left_hand_indices = list(range(7, 18))      # left wrist and fingers
+    right_hand_indices = list(range(18, 29))    # right wrist and fingers
+    
+    # Set weights - reduce upper body importance, increase hand importance
+    for idx in upper_body_indices:
+        joint_weights[idx] = 0.3     # Reduce weight for upper body
+    for idx in left_hand_indices:
+        joint_weights[idx] = 3.0     # Increase weight for left hand
+    for idx in right_hand_indices:
+        joint_weights[idx] = 3.0     # Increase weight for right hand
+    
+    # Convert to tensor and reshape for broadcasting
+    weights = tf.constant(joint_weights, dtype=FP_PRECISION)
+    weights = tf.reshape(weights, (1, 1, NUM_JOINTS, 1))
+    
+    # Apply weights to squared error
+    squared_diff = tf.square(real_skeletons - generated_skeletons)
+    weighted_squared_diff = squared_diff * weights
+    
+    return tf.reduce_mean(weighted_squared_diff)
