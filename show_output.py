@@ -189,24 +189,31 @@ def calculate_global_limits(sequence):
             y_center - limit, y_center + limit)
 
 
-def delete_frames(frame_path):
-    for filename in os.listdir(frame_path):
-            file_path = os.path.join(frame_path, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)  
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)  
-            except Exception as e:
-                logging.error(f"Failed to delete {file_path}. Reason: {e}")
+def delete_files(path):
+    if os.path.isdir(path):
+        for filename in os.listdir(path):
+                file_path = os.path.join(path, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)  
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)  
+                except Exception as e:
+                    logging.error(f"Failed to delete {file_path}. Reason: {e}")
+    elif os.path.isfile(path):
+        try:
+            os.unlink(path)  
+        except Exception as e:
+            logging.error(f"Failed to delete {path}. Reason: {e}")
     
 
 def save_generated_sequence(generated_sequence, frame_path, video_path):
     os.makedirs(frame_path, exist_ok=True)
     valid_frame_count = 0
 
-    delete_frames(frame_path)
-
+    delete_files(frame_path)
+    delete_files(video_path)
+    
     x_min, x_max, y_min, y_max = calculate_global_limits(generated_sequence)
 
     for i, frame in enumerate(generated_sequence):

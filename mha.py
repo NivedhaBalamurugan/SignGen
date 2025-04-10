@@ -5,10 +5,8 @@ from config import *
 import new_cvae_inf
 import numpy as np
 import show_output
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+import cgan_inference
+import os
 
 class MultiHeadAttentionFusion(nn.Module):
     def __init__(self, feature_dim, num_heads=4, dropout=0.1):  # Changed to 4 heads to be divisible by 58
@@ -89,8 +87,8 @@ class SignSequenceFuser(nn.Module):
 
 
 def fuse_sequences(input_word):
-    gan_sequence = new_cvae_inf.main(input_word)  
-    vae_sequence = gan_sequence  
+    gan_sequence = new_cvae_inf.get_cvae_sequence(input_word)  
+    vae_sequence = cgan_inference.get_cgan_sequence(input_word)
     
     gan_tensor = torch.FloatTensor(gan_sequence) 
     vae_tensor = torch.FloatTensor(vae_sequence)  

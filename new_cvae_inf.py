@@ -41,7 +41,7 @@ class SignLanguageGenerator:
             return generated.cpu().numpy()  
   
 
-def main(gloss):
+def get_cvae_sequence(gloss):
 
     generator = SignLanguageGenerator(
         model_path="Models/cvae_model/model_151.pth",
@@ -59,4 +59,4 @@ def main(gloss):
 
     
 if __name__ == "__main__":
-    main("fine")
+    get_cvae_sequence("fine")
