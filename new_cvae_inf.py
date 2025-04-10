@@ -43,6 +43,7 @@ class SignLanguageGenerator:
 
 def get_cvae_sequence(gloss):
 
+    gloss = check_extended_words(gloss)
     generator = SignLanguageGenerator(
         model_path="Models/cvae_model/model_151.pth",
         input_shape=(30, 29, 2),

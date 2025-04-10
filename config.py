@@ -2,6 +2,7 @@ import os
 import numpy as np
 import logging
 from logging.handlers import RotatingFileHandler
+import json
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -20,6 +21,7 @@ MISSING_TXT_PATH = os.path.join(DATASET_PATH, "missing.txt")
 CHUNKS_JSON_PATH = os.path.join(DATASET_PATH, "chunks.json")
 GLOVE_TXT_PATH = os.path.join(DATASET_PATH, "glove", "glove_20words.txt")
 ONE_HOT_TXT_PATH = os.path.join(DATASET_PATH, "0_landmarks_top50_aug100_stats.json")
+EXTENDED_WORD_PATH = os.path.join(DATASET_PATH, "extended_words.json")
 
 # Landmarks paths
 LANDMARKS_PATH = os.path.join(DATASET_PATH, "landmarks")
@@ -146,3 +148,24 @@ def get_cgan_path(word):
         number = word_to_number[word]
     CGAN_GEN_PATH = os.path.join(CGAN_MODEL_PATH, f"generator_epoch{number}.keras")
     return CGAN_GEN_PATH
+
+def check_extended_words(actual_gloss):
+
+    try:
+        with open(EXTENDED_WORD_PATH, 'r') as file:
+            synonyms_dictionary = json.load(file)
+    
+        normalized_input = actual_gloss.lower().strip()
+        
+        if normalized_input in synonyms_dictionary:
+            return normalized_input
+
+        for key, synonyms in synonyms_dictionary.items():
+            normalized_synonyms = [syn.lower().strip() for syn in synonyms]
+            if normalized_input in normalized_synonyms:
+                return key
+        return actual_gloss 
+    
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return actual_gloss
