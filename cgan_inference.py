@@ -4,16 +4,15 @@ import tensorflow as tf
 import numpy as np
 import show_output
 from config import *
-from utils.data_utils import convert_line_segments_to_skeleton, load_word_embeddings
+from utils.data_utils import load_word_embeddings
 
-INPUT_WORD = "fine"
-MODEL_NAME = "revert_joints"
-EPOCH_NO = "22"
-generator = tf.keras.models.load_model("Models\cgan_model\generator_epoch20_loss0.7656.keras")
-
-IS_SEGMENTS = True
+INPUT_WORDS = ["friend","movie","time","fine","book", "now", "help", "money", "hat", "flower"]
+MODEL_NAME = "colab_improve_attempt_actual"
+EPOCH_NO = "27"
+generator = tf.keras.models.load_model("generator_epoch27_loss0.2419.keras")
 
 def generate_skeleton_sequence(word):
+    word = check_extended_words(word)
     word_embeddings = load_word_embeddings()
     if word not in word_embeddings:
         print(f"Word '{word}' not found in embeddings.")
@@ -26,18 +25,12 @@ def generate_skeleton_sequence(word):
     generated_skeleton = generator(generator_input, training=False).numpy()
     return generated_skeleton.squeeze()
 
-def get_cgan_sequence(word, isSave_Video):
+def get_cgan_sequence(word, isSave_Video=True):
     generated_sequence = generate_skeleton_sequence(word)
     if generated_sequence is None:
         return None
         
-    if IS_SEGMENTS:
-        print(f"Generated Skeleton Shape (line segments) for '{word}': {generated_sequence.shape}")
-        line_segment_data = {word: generated_sequence.reshape(1, *generated_sequence.shape)}
-        skeleton_data = convert_line_segments_to_skeleton(line_segment_data)
-        generated_sequence = skeleton_data[word].squeeze()
-    else:
-        print(f"Generated Skeleton Shape for '{word}': {generated_sequence.shape}")
+    print(f"Generated Skeleton Shape for '{word}': {generated_sequence.shape}")
     
     # save_path = OUTPUTS_PATH
     # os.makedirs(save_path, exist_ok=True)
@@ -47,10 +40,11 @@ def get_cgan_sequence(word, isSave_Video):
     #     print("Saved successfully")
     
     if isSave_Video:
-        frames_path = os.path.join(OUTPUTS_PATH, f"cgan_{MODEL_NAME}_e{EPOCH_NO}_{INPUT_WORD}")
+        frames_path = os.path.join(OUTPUTS_PATH, f"cgan_{MODEL_NAME}_e{EPOCH_NO}_{word}")
         show_output.save_generated_sequence(generated_sequence, frames_path, CGAN_OUTPUT_VIDEO)
         
     return generated_sequence
 
 if __name__ == "__main__":
-    get_cgan_sequence(INPUT_WORD,True)
+    for word in INPUT_WORDS:
+        get_cgan_sequence(word,True)
