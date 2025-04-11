@@ -167,8 +167,6 @@ def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, pre_defined_
     plt.savefig(filename, dpi=300, bbox_inches='tight', pad_inches=0)
     plt.close()
 
-
-
 def images_to_video_ffmpeg(image_folder, output_video, fps=7):
     os.system(f"ffmpeg -framerate {fps} -i {image_folder}/frame_%d.png -c:v libx264 -pix_fmt yuv420p -vf \"scale=trunc(iw/2)*2:trunc(ih/2)*2\" {output_video}")
 

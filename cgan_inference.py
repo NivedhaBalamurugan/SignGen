@@ -1,5 +1,3 @@
-import os
-import json
 import tensorflow as tf
 import numpy as np
 import show_output
@@ -7,9 +5,7 @@ from config import *
 from utils.data_utils import load_word_embeddings
 
 INPUT_WORDS = ["friend","movie","time","fine","book", "now", "help", "money", "hat", "flower"]
-MODEL_NAME = "colab_improve_attempt_actual"
-EPOCH_NO = "27"
-generator = tf.keras.models.load_model("generator_epoch27_loss0.2419.keras")
+generator = tf.keras.models.load_model("Models/cgan_model/generator_epoch30_loss0.1639.keras")
 
 def generate_skeleton_sequence(word):
     word = check_extended_words(word)
@@ -25,26 +21,17 @@ def generate_skeleton_sequence(word):
     generated_skeleton = generator(generator_input, training=False).numpy()
     return generated_skeleton.squeeze()
 
-def get_cgan_sequence(word, isSave_Video=True):
+def get_cgan_sequence(word):
     generated_sequence = generate_skeleton_sequence(word)
     if generated_sequence is None:
         return None
         
-    print(f"Generated Skeleton Shape for '{word}': {generated_sequence.shape}")
+    print(f"Generated sequence for '{word}': {generated_sequence.shape}")
     
-    # save_path = OUTPUTS_PATH
-    # os.makedirs(save_path, exist_ok=True)
-    # json_filepath = os.path.join(save_path, f"generated_skeleton_{word}.json")
-    # with open(json_filepath, 'w') as json_file:
-    #     json.dump(generated_sequence.tolist(), json_file)
-    #     print("Saved successfully")
-    
-    if isSave_Video:
-        frames_path = os.path.join(OUTPUTS_PATH, f"cgan_{MODEL_NAME}_e{EPOCH_NO}_{word}")
-        show_output.save_generated_sequence(generated_sequence, frames_path, CGAN_OUTPUT_VIDEO)
+    show_output.save_generated_sequence(generated_sequence, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO)
         
     return generated_sequence
 
 if __name__ == "__main__":
     for word in INPUT_WORDS:
-        get_cgan_sequence(word,True)
+        get_cgan_sequence(word)
