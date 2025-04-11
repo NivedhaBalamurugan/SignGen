@@ -5,7 +5,6 @@ Project folder structure
 ```bash
 ├── repository/
 │ ├── Dataset/
-│ | ├── extended_words.json
 │ │ ├── landmarks/
 | │ │ ├── augmented/
 | │ │ ├── merged/
@@ -15,6 +14,7 @@ Project folder structure
 | | ├── glove/
 | | | └── glove.6B.50d.txt
 │ │ └── chunks.json
+│ | └── extended_words.json
 │ │ └── missing.txt
 | | └── wlasl_class_list.txt
 | | └── WLASL_v0.3.json
