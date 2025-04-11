@@ -5,6 +5,7 @@ Project folder structure
 ```bash
 ├── repository/
 │ ├── Dataset/
+│ | ├── extended_words.json
 │ │ ├── landmarks/
 | │ │ ├── augmented/
 | │ │ ├── merged/
@@ -18,6 +19,7 @@ Project folder structure
 | | └── wlasl_class_list.txt
 | | └── WLASL_v0.3.json
 │ ├── Models/
+
 ```
 
 Landmark Structure
