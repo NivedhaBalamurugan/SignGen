@@ -9,7 +9,7 @@ matplotlib_lock = Lock()
 
 
 app = Flask(__name__)
-# CORS(app, resources={r"/*": {"origins": ["http://localhost:3000","https://signolingo.vercel.app"]}})
+CORS(app, resources={r"/*": {"origins": ["http://localhost:3000","https://signgen.vercel.app"]}})
 
 
 @app.route('/')
