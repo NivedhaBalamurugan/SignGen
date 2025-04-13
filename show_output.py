@@ -82,9 +82,10 @@ def plot_a_frame(J, filename):
 
 def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, pre_defined_body_values=True):
     
-    from matplotlib.backends.backend_agg import FigureCanvasAgg
-    fig = plt.figure(figsize=(6, 6))
-    canvas = FigureCanvasAgg(fig)
+    # from matplotlib.backends.backend_agg import FigureCanvasAgg
+    # fig = plt.figure(figsize=(6, 6))
+    # canvas = FigureCanvasAgg(fig)
+    # ax = fig.add_axes([0, 0, 1, 1])
     try:
         J = np.array(J)
         if np.all(J == 0):
@@ -110,7 +111,7 @@ def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, pre_defined_
 
         upper_body_connections = [(0, 1), (1, 3), (0, 2), (0, 4), (1, 5)]
 
-        fig = plt.figure(figsize=(6, 6))
+        fig = plt.figure(figsize=(6, 6), clear=True)
         ax = fig.add_axes([0, 0, 1, 1])  
         ax.set_axis_off()
         ax.set_xlim(x_min, x_max)
@@ -171,7 +172,8 @@ def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, pre_defined_
                     [J2[11, 1], J1[3, 1]],
                     color='purple', linestyle="dashed", linewidth=1.5)
 
-        canvas.print_figure(filename, dpi=300, bbox_inches='tight', pad_inches=0)
+        plt.savefig(filename, dpi=300, bbox_inches='tight', pad_inches=0)
+        plt.close('all')
     except Exception as e:
         logging.error(f"Error plotting frame: {e}")
     finally:
