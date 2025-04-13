@@ -4,6 +4,8 @@ from werkzeug.utils import secure_filename
 from flask_cors import CORS
 from mha import fuse_sequences
 from config import *
+from threading import Lock
+matplotlib_lock = Lock()
 
 
 app = Flask(__name__)
@@ -23,7 +25,8 @@ def create_video():
         return jsonify({"error": "Gloss is required"}), 400
     
     try:
-        fused_sequence = fuse_sequences(gloss)
+        with matplotlib_lock:
+            fused_sequence = fuse_sequences(gloss)
         return jsonify({"message": "Videos created successfully"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
