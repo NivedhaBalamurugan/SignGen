@@ -1,21 +1,26 @@
 from tensorflow.keras.models import load_model
-import numpy as np
+from keras.utils import to_categorical
 from sklearn.metrics import confusion_matrix, classification_report
+import numpy as np
 import json
 from mha import fuse_sequences
 import os
 import tensorflow as tf
 from config import *
 from new_cvae_inf import get_cvae_sequence
+import pickle
 
 def load_gloss_labels():
-    LOCAL_GLOSS_LABELS_PATH = os.path.join("Dataset", "gloss_labels.json")  
-
-    with open(LOCAL_GLOSS_LABELS_PATH, 'r') as file:
+    gloss_labels_path = os.path.join("Dataset", "gloss_labels.json")
+    with open(gloss_labels_path, 'r') as file:
         gloss_labels = json.load(file)
-
-    print(f"Loaded {len(gloss_labels)} gloss labels")
     return gloss_labels
+
+def load_label_encoder():
+    label_encoder_path = os.path.join("Dataset", "label_encoder.pkl")
+    with open(label_encoder_path, 'rb') as f:
+        label_encoder = pickle.load(f)
+    return label_encoder
 
 def create_test_set(gloss_labels):
     with open(EXTENDED_WORD_PATH, 'r') as file:
@@ -25,20 +30,16 @@ def create_test_set(gloss_labels):
     y_test_raw = []
     
     for key, synonyms in synonyms_dictionary.items():
-        fused_sequence = get_cvae_sequence(key, False)  # Shape: (30, 29, 2)
+        fused_sequence = get_cvae_sequence(key, False)  
 
         if key in gloss_labels:
-            label_index = gloss_labels.index(key)
             X_test_raw.append(fused_sequence)
-            y_test_raw.append(label_index)
+            y_test_raw.append(key)
     
-    X_test_raw = np.array(X_test_raw)  # (samples, 30, 29, 2)
-    
-    X_test = X_test_raw.reshape(X_test_raw.shape[0], X_test_raw.shape[1], -1)
-    
-    y_test = tf.keras.utils.to_categorical(y_test_raw, num_classes=len(gloss_labels))
-    
-    return X_test, y_test
+    X_test_raw = np.array(X_test_raw)  
+    y_test_raw = np.array(y_test_raw)
+
+    return X_test_raw, y_test_raw
 
 def load_saved_test_set_from_json():
     json_path = os.path.join("Dataset", "test_set.json")
@@ -51,12 +52,19 @@ def load_saved_test_set_from_json():
 
 def main():
     gloss_labels = load_gloss_labels()
+    label_encoder = load_label_encoder()
     model_save_path = os.path.join(MODELS_PATH, "classifier", "best_classifier.h5")
     loaded_model = load_model(model_save_path)
 
     print("Loaded model summary:")
     loaded_model.summary()
-    X_test, y_test = create_test_set(gloss_labels)
+    X_test_raw, y_test_raw = create_test_set(gloss_labels)
+
+    X_test = X_test_raw.reshape(X_test_raw.shape[0], X_test_raw.shape[1], -1)
+
+    y_test_encoded = label_encoder.transform(y_test_raw)
+    y_test = to_categorical(y_test_encoded)
+
     # X_test, y_test = load_saved_test_set_from_json()
     print(f"X_test shape: {X_test.shape}, y_test shape: {y_test.shape}")
 
@@ -72,9 +80,9 @@ def main():
     print("Confusion Matrix:")
     print(conf_matrix)
 
-    print("Classification Report:")
-    print(classification_report(y_true_classes, y_pred_classes, 
-                            target_names=[gloss_labels[i] for i in range(len(gloss_labels))]))
+    # print("Classification Report:")
+    # print(classification_report(y_true_classes, y_pred_classes, 
+    #                         target_names=[gloss_labels[i] for i in range(len(gloss_labels))]))
 
     
 if __name__ == "__main__":
