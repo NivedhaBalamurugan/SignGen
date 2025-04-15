@@ -86,9 +86,9 @@ class SignSequenceFuser(nn.Module):
         return final_output
 
 
-def fuse_sequences(input_word):
-    gan_sequence = new_cvae_inf.get_cvae_sequence(input_word)  
-    vae_sequence = cgan_inference.get_cgan_sequence(input_word)
+def fuse_sequences(input_word, isSave=True):
+    gan_sequence = new_cvae_inf.get_cvae_sequence(input_word, isSave)  
+    vae_sequence = cgan_inference.get_cgan_sequence(input_word, isSave)
     
     gan_tensor = torch.FloatTensor(gan_sequence) 
     vae_tensor = torch.FloatTensor(vae_sequence)  
@@ -106,7 +106,8 @@ def fuse_sequences(input_word):
     
     fused_sequence = fused_tensor.numpy()
     
-    show_output.save_generated_sequence(fused_sequence, MHA_OUTPUT_FRAMES, MHA_OUTPUT_VIDEO)
+    if isSave:
+        show_output.save_generated_sequence(fused_sequence, MHA_OUTPUT_FRAMES, MHA_OUTPUT_VIDEO)
     return fused_sequence
 
 if __name__ == "__main__":

@@ -21,14 +21,15 @@ def generate_skeleton_sequence(word):
     generated_skeleton = generator(generator_input, training=False).numpy()
     return generated_skeleton.squeeze()
 
-def get_cgan_sequence(word):
+def get_cgan_sequence(word, isSave=True):
     generated_sequence = generate_skeleton_sequence(word)
     if generated_sequence is None:
         return None
         
     print(f"Generated sequence for '{word}': {generated_sequence.shape}")
     
-    show_output.save_generated_sequence(generated_sequence, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO)
+    if isSave:
+        show_output.save_generated_sequence(generated_sequence, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO)
         
     return generated_sequence
 

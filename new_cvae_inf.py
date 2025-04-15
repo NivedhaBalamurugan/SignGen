@@ -33,7 +33,7 @@ class SignLanguageGenerator:
             return generated.cpu().numpy()  
   
 
-def get_cvae_sequence(gloss):
+def get_cvae_sequence(gloss, isSave=True):
 
     gloss = check_extended_words(gloss)
     generator = SignLanguageGenerator(
@@ -46,7 +46,8 @@ def get_cvae_sequence(gloss):
     sequence = generator.generate_from_gloss(gloss)
     print(f"Generated sequence for '{gloss}':", sequence.shape)  
     generated_sign = np.squeeze(sequence, axis=0) 
-    show_output.save_generated_sequence(generated_sign, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
+    if isSave:
+        show_output.save_generated_sequence(generated_sign, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
     return generated_sign
 
     
