@@ -74,6 +74,13 @@ def load_saved_test_set_from_json():
 
     X_test = np.array(test_data["X_test"])
     y_test = np.array(test_data["y_test"])
+
+    indices = np.random.permutation(len(X_test))  
+    selected_indices = indices[:100]  
+    
+    X_test = X_test[selected_indices]
+    y_test = y_test[selected_indices]
+    
     return X_test, y_test
 
 def main():
@@ -85,7 +92,17 @@ def main():
     print("Loaded model summary:")
     loaded_model.summary()
     
-    X_test_raw, y_test_raw = create_test_set(gloss_labels)
+    all_X_test = []
+    all_y_test = []
+    
+    for _ in range(3):
+        X_test_tmp, y_test_tmp = create_test_set(gloss_labels)
+        all_X_test.append(X_test_tmp)
+        all_y_test.append(y_test_tmp)
+    
+    X_test_raw = np.concatenate(all_X_test, axis=0)
+    y_test_raw = np.concatenate(all_y_test, axis=0)
+
     X_test_extra, y_test_extra = load_saved_test_set_from_json()
 
     X_test_raw = X_test_raw.reshape(X_test_raw.shape[0], X_test_raw.shape[1], -1)
