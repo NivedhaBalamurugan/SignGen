@@ -5,6 +5,7 @@ import show_output
 from config import *
 from utils.data_utils import load_word_embeddings
 
+
 class SignLanguageGenerator:
     def __init__(self, model_path, input_shape=(30, 29, 2), nhid=64, cond_dim=50, device='cuda'):
         self.device = torch.device(device if torch.cuda.is_available() else 'cpu')
@@ -48,6 +49,8 @@ def get_cvae_sequence(gloss, isSave=True):
     generated_sign = np.squeeze(sequence, axis=0) 
     if isSave:
         show_output.save_generated_sequence(generated_sign, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
+
+    print(generated_sign[1][7:])
     return generated_sign
 
     

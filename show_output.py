@@ -82,10 +82,6 @@ def plot_a_frame(J, filename):
 
 def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, pre_defined_body_values=True):
     
-    # from matplotlib.backends.backend_agg import FigureCanvasAgg
-    # fig = plt.figure(figsize=(6, 6))
-    # canvas = FigureCanvasAgg(fig)
-    # ax = fig.add_axes([0, 0, 1, 1])
     try:
         J = np.array(J)
         if np.all(J == 0):
@@ -120,7 +116,7 @@ def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, pre_defined_
         def should_plot(joint):
             return not (joint[0] == 0 and joint[1] == 0)
 
-        def is_valid_hand_joint(joint, threshold=1e-2):
+        def is_valid_hand_joint(joint, threshold=1e-1):
             return np.linalg.norm(joint) >= threshold
 
         # Plot left hand (0 to 10 in J2)

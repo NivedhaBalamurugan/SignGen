@@ -33,9 +33,8 @@ FINAL_PATH = os.path.join(LANDMARKS_PATH, "final")
 #Final output frame paths
 CVAE_OUTPUT_FRAMES = os.path.join(OUTPUTS_PATH, "cvae_frames")
 CGAN_OUTPUT_FRAMES = os.path.join(OUTPUTS_PATH, "cgan_frames")
-CVAE_STGCN_OUTPUT_FRAMES = os.path.join(OUTPUTS_PATH, "cvae_stgcn_frames")
-CGAN_STGCN_OUTPUT_FRAMES = os.path.join(OUTPUTS_PATH, "cgan_stgcn_frames")
 MHA_OUTPUT_FRAMES = os.path.join(OUTPUTS_PATH, "mha_frames")
+MHA_OUTPUT_FRAMES_BEF_ENH = os.path.join(OUTPUTS_PATH, "mha_frames_bef_enh")
 
 
 #Final output Video paths

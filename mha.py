@@ -86,29 +86,191 @@ class SignSequenceFuser(nn.Module):
         return final_output
 
 
-def fuse_sequences(input_word, isSave=True):
-    gan_sequence = new_cvae_inf.get_cvae_sequence(input_word, isSave)  
-    vae_sequence = cgan_inference.get_cgan_sequence(input_word, isSave)
+def kalman_filter_sequence(fused_seq):
+    num_frames, num_joints, _ = fused_seq.shape
+    smoothed_seq = np.zeros_like(fused_seq)
     
-    gan_tensor = torch.FloatTensor(gan_sequence) 
-    vae_tensor = torch.FloatTensor(vae_sequence)  
+    dt = 1.0  # Assume a time step of 1 between consecutive frames.
+    A = np.array([[1, 0, dt, 0],
+                  [0, 1, 0, dt],
+                  [0, 0, 1,  0],
+                  [0, 0, 0,  1]])
     
-    gan_flat = gan_tensor.reshape(30, -1)  
-    vae_flat = vae_tensor.reshape(30, -1)  
+    H = np.array([[1, 0, 0, 0],
+                  [0, 1, 0, 0]])
+    
+    q = 0.05  # A bit higher than 0.01
+    r = 0.05  # Lower than 0.1 for less smoothing lag
+    Q = q * np.eye(4)
+    R = r * np.eye(2)
+        
+    for j in range(num_joints):
+        x = np.array([fused_seq[0, j, 0],
+                      fused_seq[0, j, 1],
+                      0,
+                      0]).reshape(4, 1)
+        P = np.eye(4)
+        
+        smoothed_seq[0, j, :] = fused_seq[0, j, :]
+        
+        for t in range(1, num_frames):
+            x_pred = A @ x
+            P_pred = A @ P @ A.T + Q
+            
+            z = fused_seq[t, j, :].reshape(2, 1)
+            
+            S = H @ P_pred @ H.T + R
+            K = P_pred @ H.T @ np.linalg.inv(S)
+            
+            x = x_pred + K @ (z - H @ x_pred)
+            P = (np.eye(4) - K @ H) @ P_pred
+            
+            smoothed_seq[t, j, :] = x[:2, 0]
+            
+    return smoothed_seq
 
-    similarity = torch.matmul(gan_flat, vae_flat.transpose(0, 1))  
-    attention_weights = torch.softmax(similarity, dim=1)  
+import numpy as np
+from scipy import interpolate
+
+def joint_trajectory_smoothing_with_bezier(fused_sequence, velocity_threshold=0.07, smoothing_factor=0.6):
+    """
+    Apply Joint Trajectory Smoothing with Bezier Curve Optimization on a skeleton sequence.
     
-    weighted_vae = torch.matmul(attention_weights, vae_flat).reshape(30, 29, 2)
+    Parameters:
+    -----------
+    fused_sequence : numpy.ndarray
+        The input fused skeleton sequence with shape (num_frames, num_joints, 2)
+    velocity_threshold : float
+        Threshold for detecting discontinuities in joint velocity
+    smoothing_factor : float
+        Controls how much smoothing to apply (0.0 to 1.0)
+        
+    Returns:
+    --------
+    numpy.ndarray
+        Smoothed skeleton sequence with the same shape as input
+    """
+    num_frames, num_joints, coords = fused_sequence.shape
+    smoothed_sequence = np.copy(fused_sequence)
     
-    alpha = 0.6 
-    fused_tensor = alpha * gan_tensor + (1 - alpha) * weighted_vae
+    # Process each joint independently
+    for joint_id in range(num_joints):
+        # Extract trajectory for this joint across all frames
+        joint_trajectory = fused_sequence[:, joint_id, :]
+        
+        # Calculate velocities between frames
+        velocities = np.sqrt(np.sum(np.diff(joint_trajectory, axis=0)**2, axis=1))
+        
+        # Detect discontinuities (frames where velocity changes suddenly)
+        velocity_changes = np.abs(np.diff(velocities))
+        discontinuity_indices = np.where(velocity_changes > velocity_threshold)[0] + 1
+        
+        # If discontinuities found, apply Bezier smoothing
+        if len(discontinuity_indices) > 0:
+            for idx in discontinuity_indices:
+                if idx > 1 and idx < num_frames - 2:
+                    # Define window around discontinuity (2 frames before and after)
+                    window_start = max(0, idx - 2)
+                    window_end = min(num_frames, idx + 3)
+                    window_size = window_end - window_start
+                    
+                    # Skip if window too small
+                    if window_size < 4:
+                        continue
+                    
+                    # Get original trajectory in window
+                    original_points = joint_trajectory[window_start:window_end]
+                    
+                    # Create parameter t for curve fitting
+                    t = np.linspace(0, 1, window_size)
+                    
+                    # Fit Bezier curve (for x and y coordinates separately)
+                    for coord in range(coords):
+                        # Create control points for Bezier curve
+                        x = np.linspace(0, 1, window_size)
+                        y = original_points[:, coord]
+                        
+                        # Calculate control points using De Casteljau's algorithm
+                        # For a cubic Bezier curve
+                        if window_size >= 4:
+                            # Fit a cubic spline through the points
+                            tck = interpolate.splrep(x, y, s=smoothing_factor)
+                            
+                            # Generate smoothed points
+                            y_smooth = interpolate.splev(x, tck)
+                            
+                            # Apply smoothing with original points for stability
+                            blend = np.linspace(0.2, 0.8, window_size)
+                            y_final = y * (1 - blend) + y_smooth * blend
+                            
+                            # Update the trajectory
+                            smoothed_sequence[window_start:window_end, joint_id, coord] = y_final
     
-    fused_sequence = fused_tensor.numpy()
+    # Ensure velocity consistency across the entire sequence
+    for joint_id in range(num_joints):
+        joint_trajectory = smoothed_sequence[:, joint_id, :]
+        
+        # Calculate current velocities
+        velocities = np.diff(joint_trajectory, axis=0)
+        
+        # Find any remaining high velocities
+        velocity_magnitudes = np.sqrt(np.sum(velocities**2, axis=1))
+        high_velocity_indices = np.where(velocity_magnitudes > velocity_threshold * 2)[0]
+        
+        # Dampen extreme velocities
+        for idx in high_velocity_indices:
+            # Reduce the velocity
+            dampened_velocity = velocities[idx] * 0.7
+            # Apply the dampened velocity
+            smoothed_sequence[idx+1, joint_id] = smoothed_sequence[idx, joint_id] + dampened_velocity
     
+    # Enforce joint dependencies (ensure connected joints maintain physical constraints)
+    # Define joint connections based on skeleton structure
+    # Example connections for upper body skeleton (customize based on your joint mapping)
+    joint_connections = [
+        (0, 1), (1, 2), (2, 3),  # Right arm chain
+        (0, 4), (4, 5), (5, 6),  # Left arm chain
+        # Add more connections based on your skeleton structure
+    ]
+    
+    for frame in range(num_frames):
+        for joint1, joint2 in joint_connections:
+            if joint1 < num_joints and joint2 < num_joints:
+                # Get current distance between connected joints
+                current_dist = np.linalg.norm(smoothed_sequence[frame, joint1] - smoothed_sequence[frame, joint2])
+                
+                # Get original distance between these joints
+                original_dist = np.linalg.norm(fused_sequence[frame, joint1] - fused_sequence[frame, joint2])
+                
+                # If distance has changed significantly, adjust to maintain constraints
+                if abs(current_dist - original_dist) > 0.05 * original_dist:
+                    # Calculate the direction vector
+                    direction = smoothed_sequence[frame, joint2] - smoothed_sequence[frame, joint1]
+                    direction = direction / np.linalg.norm(direction)
+                    
+                    # Adjust joint2 position to maintain proper distance
+                    smoothed_sequence[frame, joint2] = smoothed_sequence[frame, joint1] + direction * original_dist
+    
+    return smoothed_sequence
+
+
+def fuse_sequences(input_word, isSave=True):
+    vae_sequence = new_cvae_inf.get_cvae_sequence(input_word, isSave)  
+    gan_sequence = cgan_inference.get_cgan_sequence(input_word, isSave)
+
+    gan_body = gan_sequence[:, :7, :]    
+    vae_hands = vae_sequence[:, 7:, :]   
+    
+    fused_sequence_bef_enh = np.concatenate([gan_body, vae_hands], axis=1)  
+    
+    fused_sequence = joint_trajectory_smoothing_with_bezier(fused_sequence_bef_enh)
+    # fused_sequence = kalman_filter_sequence(fused_sequence_bef_enh)
+
     if isSave:
+        show_output.save_generated_sequence(fused_sequence_bef_enh, MHA_OUTPUT_FRAMES_BEF_ENH, MHA_OUTPUT_VIDEO)
         show_output.save_generated_sequence(fused_sequence, MHA_OUTPUT_FRAMES, MHA_OUTPUT_VIDEO)
     return fused_sequence
 
+
 if __name__ == "__main__":
-    fuse_sequences("hat")
+    fuse_sequences("police", isSave=True)
