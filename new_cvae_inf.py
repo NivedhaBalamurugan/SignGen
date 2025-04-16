@@ -50,7 +50,6 @@ def get_cvae_sequence(gloss, isSave=True):
     if isSave:
         show_output.save_generated_sequence(generated_sign, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
 
-    print(generated_sign[1][7:])
     return generated_sign
 
     
