@@ -22,7 +22,7 @@ def load_label_encoder():
         label_encoder = pickle.load(f)
     return label_encoder
 
-def create_test_set(gloss_labels):
+def create_test_set(gloss_labels, train_from_test=False):
     with open(EXTENDED_WORD_PATH, 'r') as file:
         synonyms_dictionary = json.load(file)
 
@@ -39,6 +39,32 @@ def create_test_set(gloss_labels):
     X_test_raw = np.array(X_test_raw)  
     y_test_raw = np.array(y_test_raw)
 
+
+    if train_from_test:
+            json_path = os.path.join("Dataset", "test_set_for_train.json")
+            existing_data = {"X_test": [], "y_test": []}
+            
+            # Try to load existing data
+            if os.path.exists(json_path):
+                try:
+                    with open(json_path, "r") as f:
+                        existing_data = json.load(f)
+                    print(f"Loaded existing data with {len(existing_data['X_test'])} samples")
+                except json.JSONDecodeError:
+                    print(f"Error loading existing file. Will create new file.")
+                    
+            # Convert new data to list format for JSON
+            new_X_test = X_test_raw.tolist()
+            new_y_test = y_test_raw.tolist()
+            
+            # Append new data to existing data
+            existing_data["X_test"].extend(new_X_test)
+            existing_data["y_test"].extend(new_y_test)
+            
+            # Save combined data back to file
+            with open(json_path, "w") as f:
+                json.dump(existing_data, f)
+
     return X_test_raw, y_test_raw
 
 def load_saved_test_set_from_json():
@@ -46,8 +72,8 @@ def load_saved_test_set_from_json():
     with open(json_path, "r") as f:
         test_data = json.load(f)
 
-    X_test = np.array(test_data["X_test"], dtype=np.float32)
-    y_test = np.array(test_data["y_test"], dtype=np.float32)
+    X_test = np.array(test_data["X_test"])
+    y_test = np.array(test_data["y_test"])
     return X_test, y_test
 
 def main():
@@ -58,14 +84,18 @@ def main():
 
     print("Loaded model summary:")
     loaded_model.summary()
+    
     X_test_raw, y_test_raw = create_test_set(gloss_labels)
+    X_test_extra, y_test_extra = load_saved_test_set_from_json()
 
-    X_test = X_test_raw.reshape(X_test_raw.shape[0], X_test_raw.shape[1], -1)
+    X_test_raw = X_test_raw.reshape(X_test_raw.shape[0], X_test_raw.shape[1], -1)
+
+    X_test = np.concatenate((X_test_raw, X_test_extra), axis=0)
+    y_test_raw = np.concatenate((y_test_raw, y_test_extra), axis=0)
 
     y_test_encoded = label_encoder.transform(y_test_raw)
     y_test = to_categorical(y_test_encoded)
 
-    # X_test, y_test = load_saved_test_set_from_json()
     print(f"X_test shape: {X_test.shape}, y_test shape: {y_test.shape}")
 
     loss, accuracy = loaded_model.evaluate(X_test, y_test)
@@ -87,19 +117,3 @@ def main():
     
 if __name__ == "__main__":
     main()
-
-
-# def predict_sample(sample_idx):
-#     sample = X_test[sample_idx:sample_idx+1]
-#     prediction = loaded_model.predict(sample)
-#     predicted_class = np.argmax(prediction)
-#     true_class = np.argmax(y_test[sample_idx])
-    
-#     print(f"Sample {sample_idx}:")
-#     print(f"Predicted class: {gloss_labels[predicted_class]}")
-#     print(f"Actual class: {gloss_labels[true_class]}")
-#     print(f"Prediction confidence: {prediction[0][predicted_class]:.4f}")
-
-# for i in range(5):
-#     predict_sample(i)
-#     print()
