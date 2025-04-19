@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Set the backend to Agg before importing pyplot
 import matplotlib.pyplot as plt
+import config
 
 
 def plot_a_frame(J, filename):
@@ -96,6 +97,10 @@ def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, pre_defined_
             J1[4] = RIGHT_HIP_VALUE
             J1[5] = LEFT_HIP_VALUE
             J1[6] = NOSE_VALUE
+        
+        if config.ISLETTER:
+            J1[2] = RIGHT_ELBOW_VALUE
+            J1[3] = LEFT_ELBOW_VALUE
 
         single_hand_connections = [
             (0, 1), (1, 2),      # Finger 1
@@ -179,9 +184,25 @@ def images_to_video_ffmpeg(image_folder, output_video, fps=7):
     os.system(f"ffmpeg -framerate {fps} -i {image_folder}/frame_%d.png -c:v libx264 -pix_fmt yuv420p -vf \"scale=trunc(iw/2)*2:trunc(ih/2)*2\" {output_video}")
 
 def calculate_global_limits(sequence):
+    # valid_points = []
+    # for frame in sequence:
+    #     for point in frame:
+    #         if not np.all(point == 0):  
+    #             valid_points.append(point)
+    
+    # if not valid_points:
+    #     return 0, 1, 0, 1  
+    
+    # valid_points = np.array(valid_points)
+
+    # x_coords = valid_points[:, 0]
+    # y_coords = valid_points[:, 1]
+
     all_joints = np.concatenate([frame for frame in sequence if not np.all(frame == 0)])
     x_coords = all_joints[:, 0]
     y_coords = all_joints[:, 1]
+
+
     
     x_center = (np.max(x_coords) + np.min(x_coords)) / 2
     y_center = (np.max(y_coords) + np.min(y_coords)) / 2
