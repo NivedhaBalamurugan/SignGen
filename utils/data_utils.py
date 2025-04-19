@@ -278,3 +278,20 @@ joint_angle_limits = [
     (18, 25, 26, 0, 90), # Right ring finger (wrist - ring base - ring tip)
     (18, 27, 28, 0, 90)  # Right pinky finger (wrist - pinky base - pinky tip)
 ]
+
+
+def read_real_data(file_path):
+    with open(file_path, 'r') as file:
+        real_data = json.load(file)
+
+    for gloss, data in real_data.items():
+        real_data[gloss] = np.array(data, dtype=np.float32)
+    
+    return real_data
+
+def get_real_data(gloss):
+    
+    real_data_path = os.path.join("Dataset", "real_data.json")
+    real_data = read_real_data(real_data_path)
+    return real_data[gloss]
+
