@@ -12,7 +12,7 @@ from utils.glove_utils import validate_word_embeddings
 from architectures.cgan import *
 from scipy.stats import entropy
 
-MODEL_NAME = "improve_attempt"
+MODEL_NAME = "resume_new_attempt"
 
 def load_all_data(jsonl_gz_files, word_embeddings):
     logging.info(f"Loading data from {len(jsonl_gz_files)} files")
@@ -81,24 +81,51 @@ def create_mask(real_skeleton_batch):
 def save_model_checkpoint(generator, discriminator, history, epoch, loss):
     checkpoint_dir = os.path.join(os.path.dirname(CGAN_MODEL_PATH), f"checkpoints_{MODEL_NAME}")
     os.makedirs(checkpoint_dir, exist_ok=True)
-    gen_path = os.path.join(checkpoint_dir, f"generator_epoch{epoch}_loss{loss:.4f}.keras")
-    generator.save(gen_path)
-    disc_path = os.path.join(checkpoint_dir, f"discriminator_epoch{epoch}_loss{loss:.4f}.keras")
-    discriminator.save(disc_path)
+    
+    gen_weights_path = os.path.join(checkpoint_dir, f"generator_weights_epoch{epoch}_loss{loss:.4f}.weights.weights.h5")
+    generator.save_weights(gen_weights_path)
+    
+    disc_weights_path = os.path.join(checkpoint_dir, f"discriminator_weights_epoch{epoch}_loss{loss:.4f}.weights.weights.h5")
+    discriminator.save_weights(disc_weights_path)
+    
+    try:
+        gen_model_path = os.path.join(checkpoint_dir, f"generator_epoch{epoch}_loss{loss:.4f}")
+        os.makedirs(gen_model_path, exist_ok=True)
+        tf.saved_model.save(generator, gen_model_path)
+        
+        # disc_model_path = os.path.join(checkpoint_dir, f"discriminator_epoch{epoch}_loss{loss:.4f}")
+        # os.makedirs(disc_model_path, exist_ok=True)
+        # tf.saved_model.save(discriminator, disc_model_path)
+        
+        logging.info(f"Successfully saved full models for epoch {epoch}")
+    except Exception as e:
+        logging.warning(f"Could not save full models: {e}. Only weights were saved.")
+    
     history_path = os.path.join(checkpoint_dir, f"history_epoch{epoch}.npy")
     np.save(history_path, history)
-    logging.info(f"Saved checkpoint for epoch {epoch} with loss {loss:.4f}")
-    return gen_path, disc_path
     
-def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs=100, batch_size=CGAN_BATCH_SIZE, patience=10):
+    logging.info(f"Saved checkpoint for epoch {epoch} with loss {loss:.4f}")
+    return gen_weights_path, disc_weights_path
+    
+def train_gan(generator, discriminator, word_vectors, skeleton_sequences, 
+              epochs=100, batch_size=CGAN_BATCH_SIZE, patience=10,
+              starting_epoch=0, previous_history=None):
     if not validate_data_shapes(word_vectors, skeleton_sequences):
         return False
 
     generator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5, beta_2=0.9)
     discriminator_optimizer = tf.keras.optimizers.Adam(learning_rate=0.0001, beta_1=0.5, beta_2=0.9)
 
-    total_gen_loss = 0.0
-    total_disc_loss = 0.0
+    best_loss = float('inf')
+
+    if previous_history is not None:
+        total_gen_loss = previous_history.get('total_gen_loss', 0.0)
+        total_disc_loss = previous_history.get('total_disc_loss', 0.0)
+        best_loss = previous_history.get('current_loss', float('inf'))
+    else:
+        total_gen_loss = 0.0
+        total_disc_loss = 0.0
+        best_loss = float('inf')
 
     num_samples = word_vectors.shape[0]
     steps_per_epoch = num_samples // batch_size + (1 if num_samples % batch_size > 0 else 0)
@@ -108,7 +135,6 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     # Create TensorFlow dataset with shuffling
     train_dataset = tf.data.Dataset.from_tensor_slices((word_vectors, skeleton_sequences))
     
-    best_loss = float('inf')
     patience_counter = 0
     best_generator_weights = None
     best_discriminator_weights = None
@@ -197,7 +223,7 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
         for i, weight in enumerate(weights):
             model.weights[i].assign(weight)
 
-    for epoch in range(epochs):
+    for epoch in range(starting_epoch, epochs):
         # Shuffle data for each epoch - critical for preventing mode collapse
         shuffled_dataset = train_dataset.shuffle(buffer_size=min(50000, num_samples), reshuffle_each_iteration=True)
         batched_dataset = shuffled_dataset.batch(batch_size, drop_remainder=False)
@@ -304,7 +330,36 @@ def train_gan(generator, discriminator, word_vectors, skeleton_sequences, epochs
     logging.info(f"Training complete - Total Generator Loss: {total_gen_loss:.4f}, Total Discriminator Loss: {total_disc_loss:.4f}")
     return True, {'total_gen_loss': total_gen_loss, 'total_disc_loss': total_disc_loss}
 
-def main():
+def resume_training(checkpoint_epoch, model_name=MODEL_NAME):
+    checkpoint_dir = os.path.join(os.path.dirname(CGAN_MODEL_PATH), f"checkpoints_{model_name}")
+    
+    gen_weights_files = glob.glob(os.path.join(checkpoint_dir, f"generator_weights_epoch{checkpoint_epoch}_*.weights.h5"))
+    disc_weights_files = glob.glob(os.path.join(checkpoint_dir, f"discriminator_weights_epoch{checkpoint_epoch}_*.weights.h5"))
+    history_files = glob.glob(os.path.join(checkpoint_dir, f"history_epoch{checkpoint_epoch}.npy"))
+    
+    if not gen_weights_files or not disc_weights_files or not history_files:
+        logging.error(f"Could not find checkpoint files for epoch {checkpoint_epoch}")
+        return None, None, None
+    
+    generator = build_generator()
+    discriminator = build_discriminator()
+    
+    try:
+        generator.load_weights(gen_weights_files[0])
+        logging.info(f"Successfully loaded generator weights from {gen_weights_files[0]}")
+        
+        discriminator.load_weights(disc_weights_files[0])
+        logging.info(f"Successfully loaded discriminator weights from {disc_weights_files[0]}")
+        
+        history = np.load(history_files[0], allow_pickle=True).item()
+        logging.info(f"Resumed from epoch {checkpoint_epoch} with loss {history.get('current_loss', 'N/A')}")
+        
+        return generator, discriminator, history
+    except Exception as e:
+        logging.error(f"Error loading weights: {e}")
+        return None, None, None
+
+def main(resume_epoch=None):
     logging.info("Starting CGAN training process...")
     if not validate_config():
         return
@@ -332,15 +387,39 @@ def main():
     del word_embeddings
     gc.collect()
 
-    generator = build_generator()
-    discriminator = build_discriminator()
+    if resume_epoch:
+        generator, discriminator, history = resume_training(resume_epoch)
+        if generator is None:
+            logging.error("Failed to resume training. Starting from scratch.")
+            generator = build_generator()
+            discriminator = build_discriminator()
+            starting_epoch = 0
+            previous_history = None
+        else:
+            starting_epoch = resume_epoch
+            previous_history = history
+    else:
+        generator = build_generator()
+        discriminator = build_discriminator()
+        starting_epoch = 0
+        previous_history = None
 
     log_model_summary(generator, "Generator")
     log_model_summary(discriminator, "Discriminator")
     log_training_config()
 
     try:
-        success, history = train_gan(generator, discriminator, all_word_vectors, all_skeleton_sequences, epochs=CGAN_EPOCHS, batch_size=CGAN_BATCH_SIZE, patience=20)
+        success, history = train_gan(
+            generator, 
+            discriminator, 
+            all_word_vectors, 
+            all_skeleton_sequences, 
+            epochs=CGAN_EPOCHS,
+            batch_size=CGAN_BATCH_SIZE, 
+            patience=20,
+            starting_epoch=starting_epoch,
+            previous_history=previous_history
+        )
         if success:
             save_model_and_history(CGAN_MODEL_PATH, generator, history)
             save_model_and_history(CGAN_DIS_PATH, discriminator)
@@ -366,4 +445,7 @@ def main():
 
 if __name__ == "__main__":
     setup_logging(f"cgan_training_{MODEL_NAME}")
+    # resume_epoch = 12
+    # main(resume_epoch=resume_epoch)
     main()
+    
