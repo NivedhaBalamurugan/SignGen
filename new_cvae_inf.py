@@ -68,7 +68,7 @@ def compute_ssim_score(generated_seq, gloss):
     print(f"SSIM score for '{gloss}': {ssim_score}")    
 
 def get_cvae_sequence(gloss, isSave=True):
-    gloss = check_extended_words(gloss)
+    gloss = check_extended_words(gloss.lower())
     generator = SignLanguageGenerator(
         model_path="Models/cvae_model/model_151.pth",
         input_shape=(30, 29, 2),

@@ -5,7 +5,7 @@ import matplotlib
 matplotlib.use('Agg')  
 import matplotlib.pyplot as plt
 import config
-
+from config import *
 
 def plot_a_frame(J, filename):
     J = np.array(J).reshape(49, 2)  
