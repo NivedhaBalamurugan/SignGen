@@ -1,6 +1,6 @@
 import os
 import logging
-from config import *
+
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Set the backend to Agg before importing pyplot
@@ -236,5 +236,3 @@ def save_generated_sequence(generated_sequence, frame_path, video_path):
     images_to_video_ffmpeg(frame_path, video_path)
     logging.info(f"Saved video to {video_path}")
     
-
-
