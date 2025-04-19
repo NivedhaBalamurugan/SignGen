@@ -61,5 +61,15 @@ def get_fused_video():
     
     return send_file(file_path, mimetype='video/mp4')
 
+@app.route('/performance', methods=['GET'])
+def get_performance():
+    perf_path = os.path.join("Dataset", "performance.json")
+    try:
+        with open(perf_path, 'r') as f:
+            performance_data = json.load(f)
+        return jsonify(performance_data), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True )

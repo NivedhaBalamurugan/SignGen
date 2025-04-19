@@ -1,9 +1,8 @@
 import os
 import logging
-
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')  # Set the backend to Agg before importing pyplot
+matplotlib.use('Agg')  
 import matplotlib.pyplot as plt
 import config
 
@@ -86,7 +85,7 @@ def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, pre_defined_
     try:
         J = np.array(J)
         if np.all(J == 0):
-            return  # Skip entirely blank frames
+            return 
 
         J1 = J[:7, :]   # Body joints (7 joints)
         J2 = J[7:, :]   # Hand joints (22 joints)

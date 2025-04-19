@@ -47,7 +47,7 @@ def get_cgan_sequence(word, isSave=True):
     if isSave:
         show_output.save_generated_sequence(generated_sequence, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO)
 
-    diversity_score = get_diversity_score(INPUT_WORDS,seq)
+    diversity_score = get_diversity_score(word,generated_sequence)
 
     return generated_sequence
 
@@ -100,10 +100,8 @@ def calculate_diversity_score(real_sequence, generated_sequence):
     
     return final_score
 
-def get_diversity_score(input_word, num_samples=5):
+def get_diversity_score(input_word, generated_sequence):
     real_sequence = get_real_data(input_word)    
-
-    generated_sequence = generate_skeleton_sequence(input_word, fixed_seed=True)
     
     score = calculate_diversity_score(real_sequence, generated_sequence)
     
@@ -111,5 +109,5 @@ def get_diversity_score(input_word, num_samples=5):
     return score
 
 if __name__ == "__main__":
-  seq= get_cgan_sequence(INPUT_WORD)
+  seq = get_cgan_sequence(INPUT_WORD)
     

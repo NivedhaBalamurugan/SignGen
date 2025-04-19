@@ -22,6 +22,7 @@ CHUNKS_JSON_PATH = os.path.join(DATASET_PATH, "chunks.json")
 GLOVE_TXT_PATH = os.path.join(DATASET_PATH, "glove", "glove_20words.txt")
 ONE_HOT_TXT_PATH = os.path.join(DATASET_PATH, "0_landmarks_top50_aug100_stats.json")
 EXTENDED_WORD_PATH = os.path.join(DATASET_PATH, "extended_words.json")
+ALPHABET_PATH = os.path.join(DATASET_PATH, "alphabets")
 
 # Landmarks paths
 LANDMARKS_PATH = os.path.join(DATASET_PATH, "landmarks")
@@ -79,7 +80,9 @@ RIGHT_HIP_VALUE =  [0.58529, 0.92522]
 LEFT_HIP_VALUE = [0.42915, 0.93126]
 RIGHT_SHOULDER_VALUE = [0.63497, 0.48466]
 LEFT_SHOULDER_VALUE =  [0.37355, 0.48285]
-
+RIGHT_ELBOW_VALUE = [0.65479696, 0.7519779 ]
+LEFT_ELBOW_VALUE = [0.30541024, 0.75331193]
+ISLETTER = False
 
 #CVAE parameters
 CVAE_BATCH_SIZE = 100
