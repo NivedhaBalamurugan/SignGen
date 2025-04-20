@@ -65,7 +65,7 @@ def compute_ssim_score(generated_seq, gloss):
     
     ssim_score = np.mean(ssim_scores)
 
-    print(f"SSIM score for '{gloss}': {ssim_score}")    
+    return ssim_score 
 
 def get_cvae_sequence(gloss, isSave=True):
     gloss = check_extended_words(gloss.lower())
@@ -81,6 +81,7 @@ def get_cvae_sequence(gloss, isSave=True):
     generated_sign = np.squeeze(sequence, axis=0)  
     
     ssim_score = compute_ssim_score(generated_sign, gloss)
+    print(f"SSIM score for '{gloss}': {ssim_score}")   
         
     
     if isSave:
@@ -90,4 +91,4 @@ def get_cvae_sequence(gloss, isSave=True):
 
 
 if __name__ == "__main__":
-    generated_sign, ssim_score = get_cvae_sequence("fine")
+    generated_sign, ssim_score = get_cvae_sequence("movie")

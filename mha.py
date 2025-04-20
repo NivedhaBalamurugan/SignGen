@@ -161,18 +161,22 @@ def fuse_sequences(input_word, isSave=True):
     
     fused_sequence = joint_trajectory_smoothing_with_bezier(fused_sequence_bef_enh)
 
+    print(f"Generated Fused sequence for '{input_word}': {fused_sequence.shape}")
+
     fused_ssim = new_cvae_inf.compute_ssim_score(fused_sequence, input_word)
-    fused_diversity = get_diversity_score(input_word, fused_seq)
+    fused_diversity = cgan_inference.get_diversity_score(input_word, fused_sequence)
 
     performance["FUSED_SSIM"] = fused_ssim
     performance["FUSED_Diversity"] = fused_diversity
+
+    print("SSIM score for fused sequence:", fused_ssim)
+    print("Diversity score for fused sequence:", fused_diversity)
 
     perf_path = os.path.join("Dataset", "performance.json")
     with open(perf_path, 'w') as f:
         json.dump(performance, f)
 
     if isSave:
-        show_output.save_generated_sequence(fused_sequence_bef_enh, MHA_OUTPUT_FRAMES_BEF_ENH, MHA_OUTPUT_VIDEO)
         show_output.save_generated_sequence(fused_sequence, MHA_OUTPUT_FRAMES, MHA_OUTPUT_VIDEO)
     return fused_sequence
 

@@ -11,15 +11,7 @@ import show_output
 
 INPUT_WORD = "friend"
 
-class CustomLayer(tf.keras.layers.Layer):
-    def __init__(self, saved_model_path, **kwargs):
-        super(CustomLayer, self).__init__(**kwargs)
-        self.saved_model = tf.saved_model.load(saved_model_path)
-
-    def call(self, inputs):
-        return self.saved_model.signatures['serving_default'](inputs)['output_0']
-
-generator = CustomLayer("Models/cgan_model/gen_epoch51") 
+generator = tf.keras.models.load_model("Models/cgan_model/gen_model.keras")
 
 def generate_skeleton_sequence(word, fixed_seed=True):
     word_embeddings = load_word_embeddings()
@@ -38,18 +30,19 @@ def generate_skeleton_sequence(word, fixed_seed=True):
     return generated_skeleton.squeeze()
 
 def get_cgan_sequence(word, isSave=True):
+    word = check_extended_words(word.lower())
     generated_sequence = generate_skeleton_sequence(word)
     if generated_sequence is None:
         return None
 
     print(f"Generated CGAN sequence for '{word}': {generated_sequence.shape}")
-    
+    diversity_score = get_diversity_score(word,generated_sequence)
+    print(f"Diversity score for '{word}': {diversity_score:.4f}")
+
     if isSave:
         show_output.save_generated_sequence(generated_sequence, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO)
 
-    diversity_score = get_diversity_score(word,generated_sequence)
-
-    return generated_sequence
+    return generated_sequence, diversity_score
 
 def calculate_diversity_score(real_sequence, generated_sequence):
 
@@ -105,9 +98,13 @@ def get_diversity_score(input_word, generated_sequence):
     
     score = calculate_diversity_score(real_sequence, generated_sequence)
     
-    print(f"Diversity score for '{input_word}': {score:.4f}")
     return score
 
 if __name__ == "__main__":
   seq = get_cgan_sequence(INPUT_WORD)
     
+
+
+
+
+
