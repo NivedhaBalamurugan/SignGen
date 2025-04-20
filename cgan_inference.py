@@ -45,7 +45,7 @@ def get_cgan_sequence(word, isSave=True):
     return generated_sequence, diversity_score
 
 def calculate_diversity_score(real_sequence, generated_sequence):
-
+   
     if real_sequence.shape[0] != generated_sequence.shape[0]:
         if real_sequence.shape[0] < generated_sequence.shape[0]:
             indices = np.linspace(0, real_sequence.shape[0] - 1, generated_sequence.shape[0], dtype=int)
@@ -53,50 +53,33 @@ def calculate_diversity_score(real_sequence, generated_sequence):
         else:
             indices = np.linspace(0, generated_sequence.shape[0] - 1, real_sequence.shape[0], dtype=int)
             generated_sequence = generated_sequence[indices]
-
-    real_range = np.max(real_sequence, axis=0) - np.min(real_sequence, axis=0)
-    gen_range = np.max(generated_sequence, axis=0) - np.min(generated_sequence, axis=0)
-    range_diff = np.mean(np.abs(real_range - gen_range) / (np.mean(real_range) + 1e-10))
-    range_score = np.tanh(range_diff * 3)
     
-    real_speed = np.mean(np.abs(np.diff(real_sequence, axis=0)), axis=0)
-    gen_speed = np.mean(np.abs(np.diff(generated_sequence, axis=0)), axis=0)
-    speed_diff = np.mean(np.abs(real_speed - gen_speed) / (np.mean(real_speed) + 1e-10))
-    speed_score = np.tanh(speed_diff * 3)   
-
-    real_flat = real_sequence.reshape(real_sequence.shape[0], -1)
-    gen_flat = generated_sequence.reshape(generated_sequence.shape[0], -1)
+    real_normalized = (real_sequence - np.mean(real_sequence, axis=0)) / (np.std(real_sequence, axis=0) + 1e-10)
+    gen_normalized = (generated_sequence - np.mean(generated_sequence, axis=0)) / (np.std(generated_sequence, axis=0) + 1e-10)
     
+    mse = np.mean((real_normalized - gen_normalized) ** 2)
+    mse_score = np.tanh(mse)  
     
-    pca_real = PCA(n_components=min(5, real_flat.shape[0], real_flat.shape[1]))
-    pca_gen = PCA(n_components=min(5, gen_flat.shape[0], gen_flat.shape[1]))
+    real_corr = np.corrcoef(real_normalized.reshape(real_normalized.shape[0], -1).T)
+    gen_corr = np.corrcoef(gen_normalized.reshape(gen_normalized.shape[0], -1).T)
+    corr_diff = np.mean(np.abs(real_corr - gen_corr))
+    corr_score = np.tanh(corr_diff * 5)  
     
-    pca_real.fit(real_flat)
-    pca_gen.fit(gen_flat)
+    real_fft = np.abs(np.fft.fft(real_normalized, axis=0))
+    gen_fft = np.abs(np.fft.fft(gen_normalized, axis=0))
+    fft_diff = np.mean(np.abs(real_fft - gen_fft))
+    fft_score = np.tanh(fft_diff)
     
-
-    real_var = pca_real.explained_variance_ratio_
-    gen_var = pca_gen.explained_variance_ratio_
-    
-    var_diff = np.mean(np.abs(real_var - gen_var))
-    pca_score = np.tanh(var_diff * 10)
-
-    real_psd = np.mean([np.mean(signal.welch(real_sequence[:, i])[1]) for i in range(real_sequence.shape[1])])
-    gen_psd = np.mean([np.mean(signal.welch(generated_sequence[:, i])[1]) for i in range(generated_sequence.shape[1])])
-    
-    psd_diff = np.abs(real_psd - gen_psd) / (real_psd + 1e-10)
-    psd_score = np.tanh(psd_diff * 5)
-    
-    final_score = 0.25 * range_score + 0.25 * speed_score + 0.25 * pca_score + 0.25 * psd_score
+    final_score = 0.4 * mse_score + 0.3 * corr_score + 0.3 * fft_score
     
     final_score = max(0, min(1, final_score))
     
     return final_score
 
-def get_diversity_score(input_word, generated_sequence):
-    real_sequence = get_real_data(input_word)    
-    
-    score = calculate_diversity_score(real_sequence, generated_sequence)
+def get_diversity_score(input_word,seq):
+   
+    real_sequence = get_real_data(input_word)
+    score = calculate_diversity_score(real_sequence, seq)
     
     return score
 
