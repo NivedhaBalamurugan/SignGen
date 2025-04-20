@@ -45,36 +45,65 @@ def get_cgan_sequence(word, isSave=True):
     return generated_sequence, diversity_score
 
 def calculate_diversity_score(real_sequence, generated_sequence):
-   
+    
     if real_sequence.shape[0] != generated_sequence.shape[0]:
+        
         if real_sequence.shape[0] < generated_sequence.shape[0]:
+            
             indices = np.linspace(0, real_sequence.shape[0] - 1, generated_sequence.shape[0], dtype=int)
             real_sequence = real_sequence[indices]
         else:
+            
             indices = np.linspace(0, generated_sequence.shape[0] - 1, real_sequence.shape[0], dtype=int)
             generated_sequence = generated_sequence[indices]
-    
+
+   
     real_normalized = (real_sequence - np.mean(real_sequence, axis=0)) / (np.std(real_sequence, axis=0) + 1e-10)
     gen_normalized = (generated_sequence - np.mean(generated_sequence, axis=0)) / (np.std(generated_sequence, axis=0) + 1e-10)
     
+   
+    real_normalized = np.nan_to_num(real_normalized)
+    gen_normalized = np.nan_to_num(gen_normalized)
+
+ 
     mse = np.mean((real_normalized - gen_normalized) ** 2)
-    mse_score = np.tanh(mse)  
+    mse_score = 1.0 / (1.0 + mse)  
     
-    real_corr = np.corrcoef(real_normalized.reshape(real_normalized.shape[0], -1).T)
-    gen_corr = np.corrcoef(gen_normalized.reshape(gen_normalized.shape[0], -1).T)
-    corr_diff = np.mean(np.abs(real_corr - gen_corr))
-    corr_score = np.tanh(corr_diff * 5)  
     
+    try:
+        real_flat = real_normalized.reshape(real_normalized.shape[0], -1)
+        gen_flat = gen_normalized.reshape(gen_normalized.shape[0], -1)
+        
+ 
+        correlation_matrix = np.corrcoef(real_flat.flatten(), gen_flat.flatten())
+        corr_score = (correlation_matrix[0, 1] + 1) / 2  # Map from [-1,1] to [0,1]
+    except:
+        corr_score = 0.0  
+
+ 
     real_fft = np.abs(np.fft.fft(real_normalized, axis=0))
     gen_fft = np.abs(np.fft.fft(gen_normalized, axis=0))
-    fft_diff = np.mean(np.abs(real_fft - gen_fft))
-    fft_score = np.tanh(fft_diff)
     
+ 
+    real_fft_norm = real_fft / (np.sum(real_fft) + 1e-10)
+    gen_fft_norm = gen_fft / (np.sum(gen_fft) + 1e-10)
+    
+   
+    fft_diff = np.mean(np.abs(real_fft_norm - gen_fft_norm))
+    fft_score = 1.0 - np.minimum(1.0, fft_diff)
+    
+
     final_score = 0.4 * mse_score + 0.3 * corr_score + 0.3 * fft_score
     
+
     final_score = max(0, min(1, final_score))
     
+    
+    
     return final_score
+
+
+    
 
 def get_diversity_score(input_word,seq):
    
