@@ -53,16 +53,9 @@ def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors
     gradient_penalty = tf.reduce_mean((gradients_norm - 1.0) ** 2)
     return gradient_penalty
 
-def calculate_pkd(real_skeletons, generated_skeletons):
-    distances = np.linalg.norm(real_skeletons - generated_skeletons, axis=-1)
-    avg_distance = np.mean(distances)
-    return avg_distance
 
-def calculate_kld(real_data, generated_data):
-    real_hist, _ = np.histogram(real_data, bins=30, density=True)
-    generated_hist, _ = np.histogram(generated_data, bins=30, density=True)
-    kld = entropy(real_hist + 1e-8, generated_hist + 1e-8)
-    return kld
+
+
 
 def calculate_diversity_score(generated_samples):
     pairwise_distances = []
@@ -73,10 +66,10 @@ def calculate_diversity_score(generated_samples):
     diversity_score = np.mean(pairwise_distances)
     return diversity_score
 
-def create_mask(real_skeleton_batch):
-    mask = tf.reduce_sum(tf.abs(real_skeleton_batch), axis=-1) > 0  
-    mask = tf.cast(mask, FP_PRECISION)  
-    return mask  
+#def create_mask(real_skeleton_batch):
+#    mask = tf.reduce_sum(tf.abs(real_skeleton_batch), axis=-1) > 0  
+#    mask = tf.cast(mask, FP_PRECISION)  
+#    return mask  
 
 def save_model_checkpoint(generator, discriminator, history, epoch, loss):
     checkpoint_dir = os.path.join(os.path.dirname(CGAN_MODEL_PATH), f"checkpoints_{MODEL_NAME}")
