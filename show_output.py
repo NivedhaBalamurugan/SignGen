@@ -91,7 +91,7 @@ def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, model, pre_d
         J2 = J[7:, :]   # Hand joints (22 joints)
 
         if pre_defined_body_values:
-            if model == "cgan":
+            if model == "cgan" or model == "fused":
                 J1[0] = RIGHT_SHOULDER_VALUE
                 J1[1] = LEFT_SHOULDER_VALUE
                 J1[4] = RIGHT_HIP_VALUE

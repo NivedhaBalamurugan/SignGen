@@ -160,19 +160,10 @@ def fuse_sequences(input_word, isSave=True):
     fused_sequence_bef_enh = np.zeros((gan_sequence.shape[0], len(gan_indices) + len(vae_indices), gan_sequence.shape[2]))
 
     fused_sequence_bef_enh[:, gan_indices, :] = gan_sequence[:, gan_indices, :]
-
     fused_sequence_bef_enh[:, vae_indices, :] = vae_sequence[:, vae_indices, :] 
-
-    print(np.array(fused_sequence_bef_enh).shape)
-
-    # fused_ssim = new_cvae_inf.compute_ssim_score(fused_sequence_bef_enh, input_word)
-    # fused_diversity = cgan_inference.get_diversity_score(input_word, fused_sequence_bef_enh)
-
-    # print("SSIM score for fused sequence before optimization:", fused_ssim)
-    # print("Diversity score for fused sequence before optimization:", fused_diversity)
     
     fused_sequence = joint_trajectory_smoothing_with_bezier(fused_sequence_bef_enh)
-
+    
     print(f"Generated Fused sequence for '{input_word}': {fused_sequence.shape}")
 
     main_word = check_extended_words(input_word.lower())
@@ -215,5 +206,5 @@ def get_average_perf_metrics():
 
 
 if __name__ == "__main__":
-    fuse_sequences("film", isSave=True)
+    fuse_sequences("cop", isSave=True)
     # get_average_perf_metrics()
