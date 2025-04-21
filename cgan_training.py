@@ -57,14 +57,7 @@ def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors
 
 
 
-def calculate_diversity_score(generated_samples):
-    pairwise_distances = []
-    for i in range(len(generated_samples)):
-        for j in range(i + 1, len(generated_samples)):
-            dist = np.linalg.norm(generated_samples[i] - generated_samples[j])
-            pairwise_distances.append(dist)
-    diversity_score = np.mean(pairwise_distances)
-    return diversity_score
+
 
 #def create_mask(real_skeleton_batch):
 #    mask = tf.reduce_sum(tf.abs(real_skeleton_batch), axis=-1) > 0  
@@ -423,13 +416,7 @@ def main(resume_epoch=None):
             eval_real = all_skeleton_sequences[eval_indices]
             
             generated_skeletons = generator(eval_vectors)
-            pkd_score = calculate_pkd(eval_real, generated_skeletons)
-            kld_score = calculate_kld(eval_real.flatten(), generated_skeletons.flatten())
-
-            diversity_score = calculate_diversity_score(generated_skeletons)
-            logging.info(f"Per-Keypoint Distance (PKD): {pkd_score:.4f}")
-            logging.info(f"KL Divergence (KLD): {kld_score:.4f}")
-            logging.info(f"Diversity Score: {diversity_score:.4f}")
+            
         else:
             logging.error("Training failed, models not saved")
     except Exception as e:
