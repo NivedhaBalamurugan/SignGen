@@ -67,8 +67,8 @@ def compute_ssim_score(generated_seq, gloss):
 
     return ssim_score 
 
-def get_cvae_sequence(gloss, isSave=True):
-    gloss = check_extended_words(gloss.lower())
+def get_cvae_sequence(word, isSave=True):
+    gloss = check_extended_words(word.lower())
     generator = SignLanguageGenerator(
         model_path="Models/cvae_model/model_151.pth",
         input_shape=(30, 29, 2),
@@ -77,15 +77,15 @@ def get_cvae_sequence(gloss, isSave=True):
     )
     
     sequence = generator.generate_from_gloss(gloss)
-    print(f"Generated CVAE sequence for '{gloss}':", sequence.shape)  
+    print(f"Generated CVAE sequence for '{word}':", sequence.shape)  
     generated_sign = np.squeeze(sequence, axis=0)  
     
     ssim_score = compute_ssim_score(generated_sign, gloss)
-    print(f"SSIM score for '{gloss}': {ssim_score}")   
+    print(f"SSIM score for '{word}': {ssim_score}")   
         
     
     if isSave:
-        show_output.save_generated_sequence(generated_sign, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO)
+        show_output.save_generated_sequence(generated_sign, CVAE_OUTPUT_FRAMES, CVAE_OUTPUT_VIDEO, "cvae")
 
     return generated_sign, ssim_score
 

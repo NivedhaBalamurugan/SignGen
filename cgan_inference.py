@@ -29,18 +29,18 @@ def generate_skeleton_sequence(word, fixed_seed=True):
     generated_skeleton = generator(generator_input).numpy()
     return generated_skeleton.squeeze()
 
-def get_cgan_sequence(word, isSave=True):
-    word = check_extended_words(word.lower())
+def get_cgan_sequence(gloss, isSave=True):
+    word = check_extended_words(gloss.lower())
     generated_sequence = generate_skeleton_sequence(word)
     if generated_sequence is None:
         return None
 
-    print(f"Generated CGAN sequence for '{word}': {generated_sequence.shape}")
-    diversity_score = get_diversity_score(word,generated_sequence)
-    print(f"Diversity score for '{word}': {diversity_score:.4f}")
+    print(f"Generated CGAN sequence for '{gloss}': {generated_sequence.shape}")
+    diversity_score = get_diversity_score(word, generated_sequence)
+    print(f"Diversity score for '{gloss}': {diversity_score:.4f}")
 
     if isSave:
-        show_output.save_generated_sequence(generated_sequence, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO)
+        show_output.save_generated_sequence(generated_sequence, CGAN_OUTPUT_FRAMES, CGAN_OUTPUT_VIDEO, "cgan")
 
     return generated_sequence, diversity_score
 

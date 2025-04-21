@@ -169,3 +169,18 @@ def check_extended_words(actual_gloss):
     except Exception as e:
         print(f"Error: {str(e)}")
         return actual_gloss
+
+
+def get_main_words():
+    main_words = []
+    try:
+        with open(EXTENDED_WORD_PATH, 'r') as file:
+            synonyms_dictionary = json.load(file)
+    
+        for key, synonyms in synonyms_dictionary.items():
+            main_words.append(key)
+
+    except Exception as e:
+        print(f"Error: {str(e)}")
+
+    return main_words

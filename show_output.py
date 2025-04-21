@@ -80,7 +80,7 @@ def plot_a_frame(J, filename):
     plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.close()
 
-def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, pre_defined_body_values=True):
+def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, model, pre_defined_body_values=True):
     
     try:
         J = np.array(J)
@@ -91,11 +91,12 @@ def plot_a_frame_29_joints(J, filename, x_min, x_max, y_min, y_max, pre_defined_
         J2 = J[7:, :]   # Hand joints (22 joints)
 
         if pre_defined_body_values:
-            J1[0] = RIGHT_SHOULDER_VALUE
-            J1[1] = LEFT_SHOULDER_VALUE
-            J1[4] = RIGHT_HIP_VALUE
-            J1[5] = LEFT_HIP_VALUE
-            J1[6] = NOSE_VALUE
+            if model == "cgan":
+                J1[0] = RIGHT_SHOULDER_VALUE
+                J1[1] = LEFT_SHOULDER_VALUE
+                J1[4] = RIGHT_HIP_VALUE
+                J1[5] = LEFT_HIP_VALUE
+                J1[6] = NOSE_VALUE
         
         if config.ISLETTER:
             J1[2] = RIGHT_ELBOW_VALUE
@@ -233,7 +234,7 @@ def delete_files(path):
             logging.error(f"Failed to delete {path}. Reason: {e}")
     
 
-def save_generated_sequence(generated_sequence, frame_path, video_path):
+def save_generated_sequence(generated_sequence, frame_path, video_path, model):
     os.makedirs(frame_path, exist_ok=True)
     valid_frame_count = 0
 
@@ -249,7 +250,7 @@ def save_generated_sequence(generated_sequence, frame_path, video_path):
         if(NUM_JOINTS == 49):
             plot_a_frame(frame, f"{frame_path}/frame_{valid_frame_count}.png")
         else:
-            plot_a_frame_29_joints(frame, f"{frame_path}/frame_{valid_frame_count}.png", x_min, x_max, y_min, y_max)
+            plot_a_frame_29_joints(frame, f"{frame_path}/frame_{valid_frame_count}.png", x_min, x_max, y_min, y_max, model, pre_defined_body_values=True)
         valid_frame_count += 1
 
     logging.info(f"Saved {valid_frame_count} frames")

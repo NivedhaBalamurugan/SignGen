@@ -154,32 +154,66 @@ def fuse_sequences(input_word, isSave=True):
     performance["CVAE_SSIM"] = ssim_score
     performance["CGAN_Diversity"] = diversity_score
 
-    gan_body = gan_sequence[:, :7, :]    
-    vae_hands = vae_sequence[:, 7:, :]   
-    
-    fused_sequence_bef_enh = np.concatenate([gan_body, vae_hands], axis=1)  
+    gan_indices = [0, 1, 4, 5, 6]
+    vae_indices = [2, 3, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
+
+    fused_sequence_bef_enh = np.zeros((gan_sequence.shape[0], len(gan_indices) + len(vae_indices), gan_sequence.shape[2]))
+
+    fused_sequence_bef_enh[:, gan_indices, :] = gan_sequence[:, gan_indices, :]
+
+    fused_sequence_bef_enh[:, vae_indices, :] = vae_sequence[:, vae_indices, :] 
+
+    print(np.array(fused_sequence_bef_enh).shape)
+
+    # fused_ssim = new_cvae_inf.compute_ssim_score(fused_sequence_bef_enh, input_word)
+    # fused_diversity = cgan_inference.get_diversity_score(input_word, fused_sequence_bef_enh)
+
+    # print("SSIM score for fused sequence before optimization:", fused_ssim)
+    # print("Diversity score for fused sequence before optimization:", fused_diversity)
     
     fused_sequence = joint_trajectory_smoothing_with_bezier(fused_sequence_bef_enh)
 
     print(f"Generated Fused sequence for '{input_word}': {fused_sequence.shape}")
 
-    fused_ssim = new_cvae_inf.compute_ssim_score(fused_sequence, input_word)
-    fused_diversity = cgan_inference.get_diversity_score(input_word, fused_sequence)
+    main_word = check_extended_words(input_word.lower())
+    fused_ssim = new_cvae_inf.compute_ssim_score(fused_sequence, main_word)
+    fused_diversity = cgan_inference.get_diversity_score(main_word, fused_sequence)
 
     performance["FUSED_SSIM"] = fused_ssim
     performance["FUSED_Diversity"] = fused_diversity
 
-    print("SSIM score for fused sequence:", fused_ssim)
-    print("Diversity score for fused sequence:", fused_diversity)
+    print("SSIM score for fused sequence after optimization:", fused_ssim)
+    print("Diversity score for fused sequence after optimization:", fused_diversity)
 
     perf_path = os.path.join("Dataset", "performance.json")
     with open(perf_path, 'w') as f:
         json.dump(performance, f)
 
     if isSave:
-        show_output.save_generated_sequence(fused_sequence, MHA_OUTPUT_FRAMES, MHA_OUTPUT_VIDEO)
+        show_output.save_generated_sequence(fused_sequence, MHA_OUTPUT_FRAMES, MHA_OUTPUT_VIDEO, "fused")
     return fused_sequence
+
+def get_average_perf_metrics():
+    main_words = get_main_words()
+    avg_ssim = 0
+    avg_div = 0
+    for word in main_words:
+        fuse_sequences(word, isSave=False)
+        
+        perf_path = os.path.join("Dataset", "performance.json")
+        with open(perf_path, 'r') as file:
+            perf_met = json.load(file)
+
+        avg_ssim += perf_met["FUSED_SSIM"]
+        avg_div += perf_met["FUSED_Diversity"]
+
+    avg_ssim /= len(main_words)
+    avg_div /= len(main_words)
+
+    print("Average SSIM score for fused sequence ", avg_ssim)
+    print("Average Diversity score for fused sequence ", avg_div)
 
 
 if __name__ == "__main__":
-    fuse_sequences("police", isSave=True)
+    fuse_sequences("film", isSave=True)
+    # get_average_perf_metrics()
