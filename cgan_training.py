@@ -59,10 +59,10 @@ def gradient_penalty(discriminator, real_skeletons, fake_skeletons, word_vectors
 
 
 
-#def create_mask(real_skeleton_batch):
-#    mask = tf.reduce_sum(tf.abs(real_skeleton_batch), axis=-1) > 0  
-#    mask = tf.cast(mask, FP_PRECISION)  
-#    return mask  
+def create_mask(real_skeleton_batch):
+    mask = tf.reduce_sum(tf.abs(real_skeleton_batch), axis=-1) > 0  
+    mask = tf.cast(mask, FP_PRECISION)  
+    return mask  
 
 def save_model_checkpoint(generator, discriminator, history, epoch, loss):
     checkpoint_dir = os.path.join(os.path.dirname(CGAN_MODEL_PATH), f"checkpoints_{MODEL_NAME}")
