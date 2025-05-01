@@ -9,7 +9,7 @@ import json
 import logging
 import show_output
 
-INPUT_WORD = "friend"
+INPUT_WORD = "after"
 
 generator = tf.keras.models.load_model("Models/cgan_model/gen_model.keras")
 
@@ -108,7 +108,11 @@ def calculate_diversity_score(real_sequence, generated_sequence):
 def get_diversity_score(input_word,seq):
    
     real_sequence = get_real_data(input_word)
-    score = calculate_diversity_score(real_sequence, seq)
+    if real_sequence is None:
+        print(f"No ground truth sequence found for '{input_word}'")
+        return 0.0
+    else:
+        score = calculate_diversity_score(real_sequence, seq)
     
     return score
 

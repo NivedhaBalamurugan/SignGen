@@ -206,5 +206,5 @@ def get_average_perf_metrics():
 
 
 if __name__ == "__main__":
-    fuse_sequences("cop", isSave=True)
+    fuse_sequences("computer", isSave=True)
     # get_average_perf_metrics()

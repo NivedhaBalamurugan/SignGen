@@ -6,84 +6,66 @@ from config import *
 from utils.data_utils import joint_connections, joint_angle_limits
 
 def build_generator():
-    # Input: noise + word embedding
     inputs = Input(shape=(CGAN_NOISE_DIM + EMBEDDING_DIM,))
 
-    # Dense layers to process combined input
     x = Dense(256, activation="relu")(inputs)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
 
-    # Reshape to prepare for recurrent layers
     x = Dense(512, activation="relu")(x)
     x = BatchNormalization()(x)
     x = Reshape((16, 32))(x)
 
-    # Bidirectional GRU for temporal coherence
     x = Bidirectional(GRU(64, return_sequences=True))(x)
     x = Bidirectional(GRU(64, return_sequences=True))(x)
 
-    # Expand to full sequence length
     x = TimeDistributed(Dense(128, activation="relu"))(x)
     x = UpSampling1D(2)(x)
 
-    # Final dense layers to generate coordinates
     x = TimeDistributed(Dense(NUM_JOINTS * NUM_COORDINATES, activation="tanh"))(x)
     outputs = Reshape((MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES))(x[:, :MAX_FRAMES])
 
     return Model(inputs, outputs)
 
 def build_discriminator():
-    # Input: skeleton + word embeddings
     input_shape = (MAX_FRAMES, NUM_JOINTS, NUM_COORDINATES + EMBEDDING_DIM)
     inputs = Input(shape=input_shape)
 
-    # Separate skeleton and embedding processing
     skeleton_part = Lambda(lambda x: x[:, :, :, :NUM_COORDINATES])(inputs)
     word_part = Lambda(lambda x: x[:, :, :, NUM_COORDINATES:])(inputs)
 
-    # Process word embeddings separately
     word_features = TimeDistributed(Dense(64, activation='relu'))(word_part)
 
-    # Reshape skeleton for processing
     x = Reshape((MAX_FRAMES, NUM_JOINTS * NUM_COORDINATES))(skeleton_part)
 
-    # 1D convolutions across time dimension
     x = Conv1D(128, kernel_size=5, strides=1, padding='same')(x)
     x = LeakyReLU(0.2)(x)
     x = Conv1D(256, kernel_size=5, strides=1, padding='same')(x)
     x = LeakyReLU(0.2)(x)
     x = BatchNormalization()(x)
 
-    # Add attention to word features
     word_features_flat = Reshape((MAX_FRAMES, NUM_JOINTS * 64))(word_features)
     word_attention = Dense(1, activation='sigmoid')(word_features_flat)
     x = Multiply()([x, word_attention])
 
-    # Process joint relationships with 1D convolutions
     x = Conv1D(256, kernel_size=3, strides=1, padding='same')(x)
     x = LeakyReLU(0.2)(x)
     x = BatchNormalization()(x)
 
-    # Add word features back via concatenation
     x = Concatenate()([x, word_features_flat])
 
-    # Replace GRU with LSTM which has better CuDNN support
     x = Bidirectional(LSTM(128, return_sequences=True, unroll=True))(x)
     x = Bidirectional(LSTM(128, return_sequences=False, unroll=True))(x)
 
-    # CHANGE: Add a condition matching layer
     condition_check = Dense(EMBEDDING_DIM, activation='relu')(x)
     word_vector_only = Lambda(lambda x: x[:, 0, 0, :])(word_part)
     condition_matching = Dot(axes=1)([condition_check, word_vector_only])
     condition_matching = Reshape((1,))(condition_matching)
 
-    # Dense classification layers
     x = Dense(256, activation="relu")(x)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
 
-    # Add condition matching
     x = Concatenate()([x, condition_matching])
 
     x = Dense(128, activation="relu")(x)
@@ -103,10 +85,7 @@ def discriminator_loss(real_output, fake_output):
     return real_loss + fake_loss
 
 def bone_length_consistency_loss(skeletons):
-    """
-    Penalize variations in bone length across frames
-    joint_connections: list of tuples (joint_idx1, joint_idx2) defining bones
-    """
+    
     losses = []
     for i in range(len(joint_connections)):
         joint1_idx, joint2_idx = joint_connections[i]

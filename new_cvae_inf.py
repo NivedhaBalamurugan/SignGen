@@ -36,12 +36,11 @@ class SignLanguageGenerator:
 def compute_ssim_score(generated_seq, gloss):
 
     ground_truth_seq = get_real_data(gloss)  
-    ground_truth_seq = np.array(ground_truth_seq)
-
     if ground_truth_seq is None:
         print(f"No ground truth sequence found for '{gloss}'")
-        return None
+        return 0.0
     else:
+        ground_truth_seq = np.array(ground_truth_seq)
         if generated_seq.shape != ground_truth_seq.shape:
             print(generated_seq.shape, ground_truth_seq.shape)
             raise ValueError("Generated and ground truth sequences must have the same shape")
@@ -91,4 +90,4 @@ def get_cvae_sequence(word, isSave=True):
 
 
 if __name__ == "__main__":
-    generated_sign, ssim_score = get_cvae_sequence("movie")
+    generated_sign, ssim_score = get_cvae_sequence("after")
