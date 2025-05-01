@@ -293,5 +293,7 @@ def get_real_data(gloss):
     
     real_data_path = os.path.join("Dataset", "real_data.json")
     real_data = read_real_data(real_data_path)
+    if gloss not in real_data:
+        return None
     return real_data[gloss]
 
